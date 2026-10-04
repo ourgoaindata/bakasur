@@ -1,0 +1,54 @@
+# Bakasur — Goa Gazette 39A Extractor
+
+Watch an inbox folder for Goa Official Gazette PDFs, parse each once with Docling, extract Section 39A change-of-zone tables, append rows to Google Sheets, and email a digest.
+
+## Setup
+
+```bash
+cd bakasur
+uv sync --extra dev
+```
+
+Configure optional integrations in `.env`:
+
+```env
+GOOGLE_SERVICE_ACCOUNT_FILE=credentials/service_account.json
+GOOGLE_SHEET_ID=...
+LLM_PROVIDER=heuristic   # or ollama, openai_compat
+EMAIL_ENABLED=false
+```
+
+## Usage
+
+Drop a PDF into `data/inbox/`, then:
+
+```bash
+uv run bakasur run --once
+uv run bakasur watch          # continuous polling
+uv run bakasur status
+uv run bakasur parse fixtures/your.pdf
+uv run bakasur spike-parse fixtures/your.pdf --page-range 1-5
+uv run bakasur extract-39a <gazette_id>
+uv run bakasur chunk-rag <gazette_id>
+```
+
+## How extraction works
+
+See [docs/extraction-pipeline.md](docs/extraction-pipeline.md) for how 39A tables are stitched
+across pages, how columns are mapped (heuristic first, optional local LLM), how continuation rows
+are merged, and when records are held in the review queue instead of written to the sheet.
+
+## Artifacts
+
+Each gazette is stored under `data/gazettes/{gazette_id}/`:
+
+- `docling.json` — canonical DoclingDocument (RAG-ready)
+- `pages/*.txt` — per-page text
+- `tables/*.json` — structured tables
+- `meta.json` — metadata and timings
+
+## Tests
+
+```bash
+uv run pytest
+```

@@ -1,0 +1,40 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Pipeline data (keep folder skeleton)
+data/inbox/*
+data/processed/*
+data/failed/*
+data/gazettes/*
+data/out/*
+!data/inbox/.gitkeep
+!data/processed/.gitkeep
+!data/failed/.gitkeep
+!data/gazettes/.gitkeep
+!data/out/.gitkeep
+*.preprocessed.pdf
+
+# Ledger
+bakasur.db
+bakasur.db-*
+
+# Secrets
+.env
+.env.*
+!.env.example
+credentials/
+service_account.json
+*service[-_]account*.json
+
+# Editors / OS
+.cursor/plans/
+.vscode/
+.DS_Store
