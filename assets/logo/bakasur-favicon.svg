@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Bakasur">
+  <g transform="translate(46.2 37) scale(0.71)">
+    <path d="M-36 -26 L-36 -48 L-24 -33 Z M-12 -35 L-4 -50 L-1 -32 Z" fill="#C8402F"/>
+    <path d="M-20 0 L9.5 -20.6 A36 36 0 1 0 9.5 20.6 Z" fill="#F2A33A"/>
+    <circle cx="-16" cy="-17" r="5" fill="#2B2118"/>
+  </g>
+</svg>

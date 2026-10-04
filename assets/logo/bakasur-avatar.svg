@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Bakasur">
+  <rect width="160" height="160" fill="#FFF4E0"/>
+  <g transform="translate(82.3 88) scale(1.15)">
+    <path d="M-36 -26 L-36 -48 L-24 -33 Z M-12 -35 L-4 -50 L-1 -32 Z" fill="#C8402F"/>
+    <path d="M-20 0 L9.5 -20.6 A36 36 0 1 0 9.5 20.6 Z" fill="#F2A33A"/>
+    <circle cx="-16" cy="-17" r="5" fill="#2B2118"/>
+    <g transform="translate(26 0)"><rect x="-6" y="-8" width="12" height="16" rx="1.5" fill="#fff" stroke="#2B2118" stroke-width="1.5"/><path d="M-3 -3 H3 M-3 1 H3" stroke="#1F7A6E" stroke-width="1.5"/></g>
+    <g transform="translate(46 0)"><rect x="-6" y="-8" width="12" height="16" rx="1.5" fill="#fff" stroke="#2B2118" stroke-width="1.5"/><path d="M-3 -3 H3 M-3 1 H3" stroke="#1F7A6E" stroke-width="1.5"/></g>
+  </g>
+</svg>

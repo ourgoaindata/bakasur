@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/bakasur-logo-dark.svg">
+    <img src="assets/logo/bakasur-logo.svg" alt="Bakasur" width="360">
+  </picture>
+</p>
+
 # Bakasur — Goa Gazette 39A Extractor
 
 Watch an inbox folder for Goa Official Gazette PDFs, parse each once with Docling, extract Section 39A change-of-zone tables, append rows to Google Sheets, and email a digest.
