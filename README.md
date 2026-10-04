@@ -5,7 +5,6 @@
   </picture>
 </p>
 
-# Bakasur — Goa Gazette 39A Extractor
 
 Watch an inbox folder for Goa Official Gazette PDFs, parse each once with Docling, extract Section 39A change-of-zone tables, append rows to Google Sheets, and email a digest.
 
