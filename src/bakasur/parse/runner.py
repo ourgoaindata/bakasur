@@ -28,8 +28,11 @@ def build_ocr_options(cfg: Settings) -> OcrOptions:
     if cfg.ocr_engine == "ocrmac":
         return OcrMacOptions(lang=["en-US"], scale=cfg.ocr_scale)
     if cfg.ocr_engine == "rapidocr":
-        # PaddleOCR (PP-OCR) models run through RapidOCR.
-        return RapidOcrOptions(lang=["en"], backend=cfg.rapidocr_backend, scale=cfg.ocr_scale)
+        # PaddleOCR (PP-OCR) models run through RapidOCR. The 180° line classifier is off: it
+        # flips wide, letter-spaced lines in Docling's crops, and read "10/1" as "101".
+        return RapidOcrOptions(
+            lang=["en"], backend=cfg.rapidocr_backend, scale=cfg.ocr_scale, use_cls=False
+        )
     raise ValueError(f"Unknown ocr_engine {cfg.ocr_engine!r}; expected 'ocrmac' or 'rapidocr'")
 
 

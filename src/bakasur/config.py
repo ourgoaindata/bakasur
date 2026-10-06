@@ -28,7 +28,9 @@ class Settings(BaseSettings):
 
     # Docling
     parse_batch_size: int = Field(default=20)
-    ocr_engine: str = Field(default="ocrmac")  # ocrmac | rapidocr
+    # rapidocr | ocrmac. On the 6 Aug 2026 gazette, RapidOCR kept every Sr. No. (ocrmac dropped
+    # 9 of 33), read commas as commas and kept areas out of the land-use column; ~4x slower.
+    ocr_engine: str = Field(default="rapidocr")
     rapidocr_backend: str = Field(default="torch")  # onnxruntime | openvino | paddle | torch
     ocr_scale: float = Field(default=4.0)
     # Otsu binarization of scanned pages. Off by default: on the 6 Aug 2026 gazette it made
