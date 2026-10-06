@@ -37,7 +37,12 @@ uv run bakasur parse fixtures/your.pdf
 uv run bakasur spike-parse fixtures/your.pdf --page-range 1-5
 uv run bakasur extract-39a <gazette_id>
 uv run bakasur chunk-rag <gazette_id>
+uv run bakasur to-md any/file.pdf            # writes any/file.md; -o - for stdout
 ```
+
+`to-md` converts any file Docling reads (PDF, images, docx, pptx, xlsx, html, ...) to Markdown,
+OCRing scans with RapidOCR. Paginated inputs get a `[Page N]` marker before each page's content,
+numbered as in the source file, so quotes can be checked against the original.
 
 ## How extraction works
 

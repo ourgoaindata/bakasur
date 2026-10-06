@@ -13,6 +13,7 @@ from bakasur.inbox.watcher import InboxWatcher
 from bakasur.ledger import Ledger
 from bakasur.models import GazetteStatus
 from bakasur.parse.artifacts import ArtifactStore
+from bakasur.parse.markdown import convert_to_markdown
 from bakasur.parse.runner import parse_gazette_pdf
 from bakasur.pipeline import Pipeline
 from bakasur.rag.chunk import chunk_from_artifact
@@ -20,6 +21,14 @@ from bakasur.utils import gazette_id_from_path, sha256_file
 
 app = typer.Typer(no_args_is_help=True, help="Goa Gazette 39A extractor")
 console = Console()
+err_console = Console(stderr=True)
+
+
+def _parse_page_range(page_range: str | None) -> tuple[int, int] | None:
+    if not page_range:
+        return None
+    start_s, end_s = page_range.split("-", 1)
+    return int(start_s), int(end_s)
 
 
 @app.command()
@@ -65,6 +74,33 @@ def parse(
     console.print(f"Wrote artifacts to {out} ({doc.num_pages()} pages)")
     if timings:
         console.print(f"Timings: {timings}")
+
+
+@app.command("to-md")
+def to_md_cmd(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, help="Any file Docling can read"),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Markdown path (default: next to input); '-' for stdout"
+    ),
+    force_ocr: bool = typer.Option(
+        False, "--force-ocr", help="OCR every page, ignoring any embedded text layer"
+    ),
+    page_range: str | None = typer.Option(None, help="e.g. 1-5"),
+) -> None:
+    """Convert any file to Markdown with Docling, OCRing scans with RapidOCR."""
+    out = output or file.with_suffix(".md")
+    if out.resolve() == file.resolve():
+        raise typer.BadParameter("output would overwrite the input; pass --output", param_hint="--output")
+    cfg = get_settings()
+    with err_console.status(f"Converting {file.name}..."):
+        markdown = convert_to_markdown(
+            file, cfg, force_ocr=force_ocr, page_range=_parse_page_range(page_range)
+        )
+    if str(out) == "-":
+        typer.echo(markdown)
+        return
+    out.write_text(markdown, encoding="utf-8")
+    err_console.print(f"Wrote {out} ({len(markdown):,} chars)")
 
 
 @app.command("extract-39a")
@@ -136,10 +172,7 @@ def spike_parse_cmd(
     """Decision-gate spike: tables, text export, optional page range."""
     cfg = get_settings()
     cfg.profile_timings = True
-    pr: tuple[int, int] | None = None
-    if page_range:
-        start_s, end_s = page_range.split("-", 1)
-        pr = (int(start_s), int(end_s))
+    pr = _parse_page_range(page_range)
 
     from docling.datamodel.settings import settings as docling_settings
 
