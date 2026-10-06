@@ -5,9 +5,10 @@ from pathlib import Path
 import pypdfium2 as pdfium
 
 from bakasur.config import Settings
+from bakasur.parse import runner
 from bakasur.parse.pageinfo import classify_pages, count_page_chars
 from bakasur.parse.preprocess import build_preprocessed_pdf
-from bakasur.parse.runner import resolve_input_pdf
+from bakasur.parse.runner import parse_gazette_pdf, resolve_input_pdf
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 DIGITAL = FIXTURES / (
@@ -47,7 +48,7 @@ def test_only_scanned_pages_are_rasterized(tmp_path: Path):
     src = _mixed_pdf(tmp_path / "mixed.pdf")
     assert classify_pages(src) == {1: False, 2: True, 3: False}
 
-    out = resolve_input_pdf(src, Settings(preprocess_scans=True), classify_pages(src))
+    out = resolve_input_pdf(src, Settings(preprocess_scans=True), classify_pages(src), tmp_path)
 
     assert out != src
     assert _page_sizes(out) == _page_sizes(src)
@@ -71,6 +72,27 @@ def test_rasterized_page_is_binarized(tmp_path: Path):
     assert {v for _, v in bitmap.getcolors()} <= {0, 255}
 
 
-def test_digital_pdf_is_not_preprocessed():
+def test_digital_pdf_is_not_preprocessed(tmp_path: Path):
     cfg = Settings(preprocess_scans=True)
-    assert resolve_input_pdf(DIGITAL, cfg, classify_pages(DIGITAL)) == DIGITAL
+    assert resolve_input_pdf(DIGITAL, cfg, classify_pages(DIGITAL), tmp_path) == DIGITAL
+
+
+def test_preprocessed_pdf_is_not_left_next_to_source(tmp_path: Path, monkeypatch):
+    # The inbox watcher would pick a leftover PDF up as a new gazette.
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    src = _mixed_pdf(inbox / "mixed.pdf")
+    converted: list[Path] = []
+
+    def fake_convert(pdf_path: Path, cfg: Settings):
+        assert pdf_path.exists()
+        converted.append(pdf_path)
+        return None, {}
+
+    monkeypatch.setattr(runner, "convert_pdf_batched", fake_convert)
+    parse_gazette_pdf(src, Settings(preprocess_scans=True))
+
+    assert len(converted) == 1 and converted[0] != src
+    assert converted[0].parent != inbox
+    assert not converted[0].exists()
+    assert list(inbox.iterdir()) == [src]
