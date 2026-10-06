@@ -28,8 +28,12 @@ class Settings(BaseSettings):
 
     # Docling
     parse_batch_size: int = Field(default=20)
+    ocr_engine: str = Field(default="ocrmac")  # ocrmac | rapidocr
+    rapidocr_backend: str = Field(default="torch")  # onnxruntime | openvino | paddle | torch
     ocr_scale: float = Field(default=4.0)
-    preprocess_scans: bool = Field(default=True)
+    # Otsu binarization of scanned pages. Off by default: on the 6 Aug 2026 gazette it made
+    # OCR read commas as periods and pushed areas into the land-use column (194/253 vs 216/253).
+    preprocess_scans: bool = Field(default=False)
     profile_timings: bool = Field(default=False)
 
     # 39A anchors
@@ -50,7 +54,7 @@ class Settings(BaseSettings):
     # Page furniture ignored when deciding whether text surrounds a table
     running_text_patterns: list[str] = Field(
         default=[
-            r"^OFFICIAL\s+GAZETTE\s*[-—–]\s*GOVT",
+            r"^OFFICIAL\s+GAZETTE\s*[-—–]?\s*GOVT",  # OCR sometimes drops the dash
             r"^SERIES\s+[IVX]+\s+No\.?\s*\d+",
             r"^\d{1,2}\s*(ST|ND|RD|TH)\s+[A-Z]+,?\s+\d{4}$",
             r"^\d{1,5}$",
