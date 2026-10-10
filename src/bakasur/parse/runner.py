@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 from typing import Any
 
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import (
     OcrMacOptions,
+    OcrOptions,
     PdfPipelineOptions,
+    RapidOcrOptions,
     TableFormerMode,
     TableStructureOptions,
 )
@@ -21,8 +24,20 @@ from bakasur.parse.pageinfo import classify_pages, page_count
 from bakasur.parse.preprocess import build_preprocessed_pdf
 
 
+def build_ocr_options(cfg: Settings) -> OcrOptions:
+    if cfg.ocr_engine == "ocrmac":
+        return OcrMacOptions(lang=["en-US"], scale=cfg.ocr_scale)
+    if cfg.ocr_engine == "rapidocr":
+        # PaddleOCR (PP-OCR) models run through RapidOCR. The 180° line classifier is off: it
+        # flips wide, letter-spaced lines in Docling's crops, and read "10/1" as "101".
+        return RapidOcrOptions(
+            lang=["en"], backend=cfg.rapidocr_backend, scale=cfg.ocr_scale, use_cls=False
+        )
+    raise ValueError(f"Unknown ocr_engine {cfg.ocr_engine!r}; expected 'ocrmac' or 'rapidocr'")
+
+
 def build_converter(cfg: Settings) -> DocumentConverter:
-    ocr_options = OcrMacOptions(lang=["en-US"], scale=cfg.ocr_scale)
+    ocr_options = build_ocr_options(cfg)
     pipeline_options = PdfPipelineOptions(
         do_ocr=True,
         do_table_structure=True,
@@ -78,22 +93,29 @@ def convert_pdf_batched(
     return convert_pdf(pdf_path, cfg)
 
 
-def resolve_input_pdf(pdf_path: Path, cfg: Settings) -> Path:
-    """Optionally preprocess scanned PDFs before conversion."""
+def resolve_input_pdf(
+    pdf_path: Path, cfg: Settings, scanned: dict[int, bool], out_dir: Path
+) -> Path:
+    """
+    Optionally preprocess the scanned pages before conversion; digital pages pass through.
+    The preprocessed copy goes in out_dir, never next to the source: the source usually
+    sits in the watched inbox, where a new PDF would be picked up as another gazette.
+    """
     if not cfg.preprocess_scans:
         return pdf_path
-    scanned = classify_pages(pdf_path)
-    if not any(scanned.values()):
+    scanned_indices = [page_no - 1 for page_no, is_scanned in scanned.items() if is_scanned]
+    if not scanned_indices:
         return pdf_path
-    out = pdf_path.parent / f"{pdf_path.stem}.preprocessed.pdf"
-    return build_preprocessed_pdf(pdf_path, out)
+    out = out_dir / f"{pdf_path.stem}.preprocessed.pdf"
+    return build_preprocessed_pdf(pdf_path, out, page_indices=scanned_indices)
 
 
 def parse_gazette_pdf(
     pdf_path: Path,
     cfg: Settings,
 ) -> tuple[DoclingDocument, dict[str, Any], dict[int, bool]]:
-    input_pdf = resolve_input_pdf(pdf_path, cfg)
-    doc, timings = convert_pdf_batched(input_pdf, cfg)
     scanned_map = classify_pages(pdf_path)
+    with tempfile.TemporaryDirectory(prefix="bakasur-preprocess-") as tmp:
+        input_pdf = resolve_input_pdf(pdf_path, cfg, scanned_map, Path(tmp))
+        doc, timings = convert_pdf_batched(input_pdf, cfg)
     return doc, timings, scanned_map

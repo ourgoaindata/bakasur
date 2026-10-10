@@ -38,14 +38,10 @@ def _validate_notification(
             issues.append(ValidationIssue(row=row, reason=row.review_reason))
         if not row.survey_raw:
             issues.append(ValidationIssue(row=row, reason="Missing survey numbers"))
-        if row.taluka and not is_known_taluka(row.taluka):
-            issues.append(
-                ValidationIssue(
-                    row=row,
-                    reason=f"Unknown taluka: {row.taluka}",
-                    severity="warning",
-                )
-            )
+        if not row.taluka:
+            issues.append(ValidationIssue(row=row, reason="Missing taluka"))
+        elif not is_known_taluka(row.taluka):
+            issues.append(ValidationIssue(row=row, reason=f"Unknown taluka: {row.taluka}"))
         sr = _parse_sr_no(row.sr_no)
         if sr is not None:
             if sr in seen_sr:
