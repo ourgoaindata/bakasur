@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # Otsu binarization of scanned pages. Off by default: on the 6 Aug 2026 gazette it made
     # OCR read commas as periods and pushed areas into the land-use column (194/253 vs 216/253).
     preprocess_scans: bool = Field(default=False)
+    # Detect sideways / upside-down scanned pages and turn them upright before OCR. A table
+    # printed sideways on a portrait page (MoM 274, p. 38) otherwise comes out as gibberish.
+    fix_orientation: bool = Field(default=True)
     profile_timings: bool = Field(default=False)
 
     # 39A anchors

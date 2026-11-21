@@ -13,7 +13,7 @@ from bakasur.inbox.watcher import InboxWatcher
 from bakasur.ledger import Ledger
 from bakasur.models import GazetteStatus
 from bakasur.parse.artifacts import ArtifactStore
-from bakasur.parse.markdown import convert_to_markdown
+from bakasur.parse.markdown import convert_to_markdown_with_orientation
 from bakasur.parse.runner import parse_gazette_pdf
 from bakasur.pipeline import Pipeline
 from bakasur.rag.chunk import chunk_from_artifact
@@ -61,7 +61,7 @@ def parse(
     cfg.ensure_dirs()
     sha = sha256_file(pdf)
     gid = gazette_id or gazette_id_from_path(pdf, sha)
-    doc, timings, scanned = parse_gazette_pdf(pdf, cfg)
+    doc, timings, scanned, orientations = parse_gazette_pdf(pdf, cfg)
     store = ArtifactStore(cfg.gazettes_dir)
     out = store.write(
         gid,
@@ -70,6 +70,7 @@ def parse(
         sha256=sha,
         timings=timings,
         scanned_pages=scanned,
+        page_orientation=orientations,
     )
     console.print(f"Wrote artifacts to {out} ({doc.num_pages()} pages)")
     if timings:
@@ -93,9 +94,13 @@ def to_md_cmd(
         raise typer.BadParameter("output would overwrite the input; pass --output", param_hint="--output")
     cfg = get_settings()
     with err_console.status(f"Converting {file.name}..."):
-        markdown = convert_to_markdown(
+        markdown, orientations = convert_to_markdown_with_orientation(
             file, cfg, force_ocr=force_ocr, page_range=_parse_page_range(page_range)
         )
+    for o in orientations:
+        if o.rotation or not o.confident:
+            colour = "yellow" if not o.confident else "cyan"
+            err_console.print(f"[{colour}]Page {o.page_no}: {o.describe()}[/{colour}]")
     if str(out) == "-":
         typer.echo(markdown)
         return
@@ -183,7 +188,7 @@ def spike_parse_cmd(
 
         doc, timings = convert_pdf(pdf, cfg, page_range=pr)
     else:
-        doc, timings, _ = parse_gazette_pdf(pdf, cfg)
+        doc, timings, _, _ = parse_gazette_pdf(pdf, cfg)
 
     first_page = min(doc.pages.keys()) if doc.pages else 1
     text_default = doc.export_to_text(page_no=first_page, traverse_pictures=False)

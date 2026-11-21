@@ -89,7 +89,7 @@ class Pipeline:
 
         try:
             if not self.store.exists(gazette_id):
-                doc, timings, scanned = parse_gazette_pdf(pdf_path, self.cfg)
+                doc, timings, scanned, orientations = parse_gazette_pdf(pdf_path, self.cfg)
                 artifact_dir = self.store.write(
                     gazette_id,
                     pdf_path,
@@ -97,6 +97,7 @@ class Pipeline:
                     sha256=sha,
                     timings=timings,
                     scanned_pages=scanned,
+                    page_orientation=orientations,
                 )
                 self.ledger.update_status(
                     gazette_id,

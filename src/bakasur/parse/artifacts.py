@@ -6,7 +6,7 @@ import importlib.metadata as importlib_metadata
 import json
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 from docling_core.types.doc import (
@@ -19,6 +19,9 @@ from docling_core.types.doc import (
 
 from bakasur.models import GazetteMetadata
 from bakasur.utils import parse_filename_metadata
+
+if TYPE_CHECKING:
+    from bakasur.parse.orientation import Orientation
 
 TRAVERSE_PICTURES = True
 _FURNITURE_LABELS = {DocItemLabel.PAGE_HEADER, DocItemLabel.PAGE_FOOTER}
@@ -76,6 +79,7 @@ class ArtifactStore:
         sha256: str,
         timings: dict[str, Any] | None = None,
         scanned_pages: dict[int, bool] | None = None,
+        page_orientation: list[Orientation] | None = None,
     ) -> Path:
         gdir = self.gazette_dir(gazette_id)
         raw = gdir / "raw.pdf"
@@ -149,6 +153,8 @@ class ArtifactStore:
                 "docling_core_version": importlib_metadata.version("docling-core"),
                 "timings": timings or {},
                 "scanned_pages": scanned_pages or {},
+                # Only scanned pages are checked; uncertain ones need a look by hand.
+                "page_orientation": [o.to_dict() for o in page_orientation or []],
             },
         )
         (gdir / "meta.json").write_text(
