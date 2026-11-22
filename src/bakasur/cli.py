@@ -15,7 +15,11 @@ from bakasur.inbox.watcher import InboxWatcher
 from bakasur.ledger import Ledger
 from bakasur.models import GazetteStatus
 from bakasur.parse.artifacts import ArtifactStore
-from bakasur.parse.markdown import convert_to_markdown
+from bakasur.parse.markdown import (
+    BatchResult,
+    convert_directory,
+    convert_to_markdown_with_orientation,
+)
 from bakasur.parse.runner import parse_gazette_pdf
 from bakasur.pipeline import Pipeline, publishable_rows
 from bakasur.rag.chunk import chunk_from_artifact
@@ -65,7 +69,7 @@ def parse(
     cfg.ensure_dirs()
     sha = sha256_file(pdf)
     gid = gazette_id or gazette_id_from_path(pdf, sha)
-    doc, timings, scanned = parse_gazette_pdf(pdf, cfg)
+    doc, timings, scanned, orientations = parse_gazette_pdf(pdf, cfg)
     store = ArtifactStore(cfg.gazettes_dir)
     out = store.write(
         gid,
@@ -74,6 +78,7 @@ def parse(
         sha256=sha,
         timings=timings,
         scanned_pages=scanned,
+        page_orientation=orientations,
     )
     console.print(f"Wrote artifacts to {out} ({doc.num_pages()} pages)")
     if timings:
@@ -97,14 +102,79 @@ def to_md_cmd(
         raise typer.BadParameter("output would overwrite the input; pass --output", param_hint="--output")
     cfg = get_settings()
     with err_console.status(f"Converting {file.name}..."):
-        markdown = convert_to_markdown(
+        markdown, orientations = convert_to_markdown_with_orientation(
             file, cfg, force_ocr=force_ocr, page_range=_parse_page_range(page_range)
         )
+    for o in orientations:
+        if o.rotation or not o.confident:
+            colour = "yellow" if not o.confident else "cyan"
+            err_console.print(f"[{colour}]Page {o.page_no}: {o.describe()}[/{colour}]")
     if str(out) == "-":
         typer.echo(markdown)
         return
     out.write_text(markdown, encoding="utf-8")
     err_console.print(f"Wrote {out} ({len(markdown):,} chars)")
+
+
+@app.command("to-md-batch")
+def to_md_batch_cmd(
+    input_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False, help="Folder of files to convert (not recursive)"
+    ),
+    output_dir: Path = typer.Option(
+        ..., "--output-dir", "-o", help="Each file goes to <output-dir>/<name>/ with its Markdown"
+    ),
+    glob: str = typer.Option("*.pdf", "--glob", help="Which files in input_dir to convert"),
+    force_ocr: bool = typer.Option(
+        False, "--force-ocr", help="OCR every page, ignoring any embedded text layer"
+    ),
+    overwrite: bool = typer.Option(
+        False, "--overwrite", help="Reconvert files that already have a Markdown output"
+    ),
+    limit: int | None = typer.Option(None, help="Convert only the first N matching files"),
+) -> None:
+    """Convert every matching file in a folder to Markdown, loading the models once."""
+    if output_dir.resolve() == input_dir.resolve():
+        raise typer.BadParameter("output would overwrite the input folder", param_hint="--output-dir")
+    files = sorted(p for p in input_dir.glob(glob) if p.is_file())
+    if limit is not None:
+        files = files[:limit]
+    if not files:
+        err_console.print(f"[red]No files match {glob!r} in {input_dir}[/red]")
+        raise typer.Exit(1)
+
+    cfg = get_settings()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    total = len(files)
+    seen = 0
+
+    with (output_dir / "_batch.log").open("a", encoding="utf-8") as log:
+
+        def report(result: BatchResult) -> None:
+            nonlocal seen
+            seen += 1
+            detail = result.error or f"{result.chars:,} chars"
+            if note := result.orientation_summary():
+                detail += f"  ({note})"
+            line = f"{result.status:<9} {result.seconds:7.1f}s  {result.path.name}  {detail}"
+            err_console.print(f"[{seen}/{total}] {line}", markup=False)
+            log.write(line + "\n")
+            log.flush()
+
+        err_console.print(f"Converting {total} file(s) to {output_dir}...")
+        results = convert_directory(
+            files, output_dir, cfg, force_ocr=force_ocr, overwrite=overwrite, on_result=report
+        )
+
+    failed = [r for r in results if r.status == "failed"]
+    counts = {s: sum(r.status == s for r in results) for s in ("converted", "skipped", "failed")}
+    console.print(
+        f"Converted {counts['converted']}, skipped {counts['skipped']}, failed {counts['failed']}"
+    )
+    for r in failed:
+        console.print(f"  failed: {r.path.name}: {r.error}", markup=False)
+    if failed:
+        raise typer.Exit(1)
 
 
 @app.command("extract-39a")
@@ -209,7 +279,7 @@ def spike_parse_cmd(
 
         doc, timings = convert_pdf(pdf, cfg, page_range=pr)
     else:
-        doc, timings, _ = parse_gazette_pdf(pdf, cfg)
+        doc, timings, _, _ = parse_gazette_pdf(pdf, cfg)
 
     first_page = min(doc.pages.keys()) if doc.pages else 1
     text_default = doc.export_to_text(page_no=first_page, traverse_pictures=False)

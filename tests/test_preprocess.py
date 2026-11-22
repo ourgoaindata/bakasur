@@ -48,7 +48,8 @@ def test_only_scanned_pages_are_rasterized(tmp_path: Path):
     src = _mixed_pdf(tmp_path / "mixed.pdf")
     assert classify_pages(src) == {1: False, 2: True, 3: False}
 
-    out = resolve_input_pdf(src, Settings(preprocess_scans=True), classify_pages(src), tmp_path)
+    cfg = Settings(preprocess_scans=True, fix_orientation=False)
+    out = resolve_input_pdf(src, cfg, classify_pages(src), tmp_path).path
 
     assert out != src
     assert _page_sizes(out) == _page_sizes(src)
@@ -74,7 +75,8 @@ def test_rasterized_page_is_binarized(tmp_path: Path):
 
 def test_digital_pdf_is_not_preprocessed(tmp_path: Path):
     cfg = Settings(preprocess_scans=True)
-    assert resolve_input_pdf(DIGITAL, cfg, classify_pages(DIGITAL), tmp_path) == DIGITAL
+    prepared = resolve_input_pdf(DIGITAL, cfg, classify_pages(DIGITAL), tmp_path)
+    assert prepared.path == DIGITAL and prepared.orientations == []
 
 
 def test_preprocessed_pdf_is_not_left_next_to_source(tmp_path: Path, monkeypatch):
@@ -90,7 +92,7 @@ def test_preprocessed_pdf_is_not_left_next_to_source(tmp_path: Path, monkeypatch
         return None, {}
 
     monkeypatch.setattr(runner, "convert_pdf_batched", fake_convert)
-    parse_gazette_pdf(src, Settings(preprocess_scans=True))
+    parse_gazette_pdf(src, Settings(preprocess_scans=True, fix_orientation=False))
 
     assert len(converted) == 1 and converted[0] != src
     assert converted[0].parent != inbox
