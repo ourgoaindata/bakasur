@@ -58,7 +58,7 @@ the candidate angles picks the direction. Turned pages get an HTML comment under
 `[Page N]` marker. Pages the check is unsure about get a visible
 `> **Orientation uncertain:**` line and are listed on stderr, in `_batch.log`, and in the
 artifact `meta.json` (`page_orientation`), for a check by hand. Set `FIX_ORIENTATION=false` to
-turn the check off. See [orientation.py](src/bakasur/parse/orientation.py) for the thresholds.
+turn the check off. See [orientation.py](src/bakasur/core/convert/orientation.py) for the thresholds.
 
 Each run also writes `data/out/run_*.master.csv`: the run's change-of-zone rows in the column
 layout of the "Substantive Objections" tab of the 39A master sheet. `export-master` writes the

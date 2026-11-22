@@ -21,7 +21,7 @@ from bakasur.models import GazetteMetadata
 from bakasur.utils import parse_filename_metadata
 
 if TYPE_CHECKING:
-    from bakasur.parse.orientation import Orientation
+    from bakasur.core.convert.orientation import Orientation
 
 TRAVERSE_PICTURES = True
 _FURNITURE_LABELS = {DocItemLabel.PAGE_HEADER, DocItemLabel.PAGE_FOOTER}

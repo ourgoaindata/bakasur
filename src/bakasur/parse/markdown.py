@@ -1,10 +1,9 @@
-"""Convert any Docling-supported file to Markdown, OCRing with RapidOCR."""
+"""Convert any Docling-supported file to Markdown, one at a time or a folder in a batch."""
 
 from __future__ import annotations
 
 import multiprocessing
 import shutil
-import tempfile
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -12,56 +11,11 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import Any, Literal
 
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import (
-    PdfPipelineOptions,
-    RapidOcrOptions,
-    TableFormerMode,
-    TableStructureOptions,
-)
-from docling.document_converter import DocumentConverter, ImageFormatOption, PdfFormatOption
 from docling_core.types.doc import DoclingDocument
 
 from bakasur.config import Settings
+from bakasur.core.convert import Orientation, OrientationDetector, build_converter, convert
 from bakasur.parse.artifacts import TRAVERSE_PICTURES
-from bakasur.parse.orientation import Orientation, OrientationDetector
-from bakasur.parse.pageinfo import classify_pages, image_pages
-from bakasur.parse.preprocess import PreparedPdf, prepare_pdf
-
-# The Markdown converter runs RapidOCR on torch (see build_markdown_converter).
-OCR_BACKEND = "torch"
-
-
-def build_markdown_converter(cfg: Settings, *, force_ocr: bool = False) -> DocumentConverter:
-    """
-    Converter for arbitrary inputs. PDFs and images go through layout, TableFormer and
-    RapidOCR; other formats (docx, pptx, html, xlsx, ...) use Docling's native backends.
-    """
-    ocr_options = RapidOcrOptions(
-        lang=["en"],
-        # torch ships with docling; RapidOCR's default onnxruntime is not installed.
-        backend=OCR_BACKEND,
-        scale=cfg.ocr_scale,
-        force_full_page_ocr=force_ocr,
-        # The 180° line classifier flips some wide, letter-spaced lines in layout crops and
-        # garbles them ("MANAGEMENT AUTHORITY (GCZMA) HELD ON ..." -> "M  O Y (  t").
-        use_cls=False,
-    )
-    pipeline_options = PdfPipelineOptions(
-        do_ocr=True,
-        do_table_structure=True,
-        ocr_options=ocr_options,
-        table_structure_options=TableStructureOptions(
-            mode=TableFormerMode.ACCURATE,
-            do_cell_matching=True,
-        ),
-    )
-    return DocumentConverter(
-        format_options={
-            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options),
-            InputFormat.IMAGE: ImageFormatOption(pipeline_options=pipeline_options),
-        }
-    )
 
 
 def page_marker(page_no: int) -> str:
@@ -100,31 +54,6 @@ def document_to_markdown(
     return "\n\n---\n\n".join(sections) + "\n"
 
 
-def _prepare(
-    path: Path,
-    cfg: Settings,
-    tmp_dir: Path,
-    page_range: tuple[int, int] | None,
-    detector: OrientationDetector | None,
-) -> PreparedPdf:
-    """Turn sideways image-based pages of a PDF upright; other inputs pass through untouched."""
-    if not cfg.fix_orientation or path.suffix.lower() != ".pdf":
-        return PreparedPdf(path)
-    try:
-        scanned = classify_pages(path)
-        images = image_pages(path)
-    except Exception:
-        return PreparedPdf(path)  # not a readable PDF; let Docling report the real error
-    first, last = page_range or (1, len(scanned))
-    indices = [n - 1 for n in scanned if (scanned[n] or images.get(n)) and first <= n <= last]
-    return prepare_pdf(
-        path,
-        tmp_dir / f"{path.stem}.upright.pdf",
-        orient_indices=indices,
-        detector=detector or OrientationDetector(OCR_BACKEND),
-    )
-
-
 def convert_file(
     converter: Any,
     path: Path,
@@ -134,11 +63,8 @@ def convert_file(
     detector: OrientationDetector | None = None,
 ) -> tuple[str, list[Orientation]]:
     """Markdown for one file, plus what the orientation check found on its scanned pages."""
-    with tempfile.TemporaryDirectory(prefix="bakasur-to-md-") as tmp:
-        prepared = _prepare(path, cfg, Path(tmp), page_range, detector)
-        kwargs: dict[str, Any] = {"page_range": page_range} if page_range else {}
-        doc = converter.convert(str(prepared.path), **kwargs).document
-    return document_to_markdown(doc, prepared.orientations), prepared.orientations
+    converted = convert(path, cfg, converter=converter, page_range=page_range, detector=detector)
+    return document_to_markdown(converted.document, converted.orientations), converted.orientations
 
 
 def convert_to_markdown(
@@ -160,7 +86,7 @@ def convert_to_markdown_with_orientation(
     force_ocr: bool = False,
     page_range: tuple[int, int] | None = None,
 ) -> tuple[str, list[Orientation]]:
-    converter = build_markdown_converter(cfg, force_ocr=force_ocr)
+    converter = build_converter(cfg, force_ocr=force_ocr)
     return convert_file(converter, path, cfg, page_range=page_range)
 
 
@@ -193,7 +119,7 @@ def _worker_main(
     conn: Connection, make_converter: Callable[..., Any], cfg: Settings, force_ocr: bool
 ) -> None:
     converter = make_converter(cfg, force_ocr=force_ocr)
-    detector = OrientationDetector(OCR_BACKEND)  # models load on first scanned page
+    detector = OrientationDetector(cfg.rapidocr_backend)  # models load on first scanned page
     while (path := conn.recv()) is not None:
         try:
             markdown, orientations = convert_file(converter, path, cfg, detector=detector)
@@ -260,7 +186,7 @@ def convert_directory(
     crashes, a fresh one retries the file once before it is reported as failed.
     """
     # Looked up at call time so tests can swap in a stub factory.
-    make_converter = build_markdown_converter
+    make_converter = build_converter
     worker: _Worker | None = None
     results: list[BatchResult] = []
     try:

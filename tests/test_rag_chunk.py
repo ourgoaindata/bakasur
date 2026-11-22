@@ -7,7 +7,7 @@ import pytest
 
 from bakasur.config import Settings
 from bakasur.parse.artifacts import ArtifactStore
-from bakasur.parse.runner import convert_pdf
+from bakasur.core.convert import convert
 from bakasur.rag.chunk import chunk_from_artifact
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -19,10 +19,8 @@ DIGITAL = FIXTURES / (
 @pytest.mark.slow
 def test_chunk_from_saved_artifact(tmp_path: Path):
     cfg = Settings()
-    from bakasur.parse.pageinfo import classify_pages
-
-    doc, timings = convert_pdf(DIGITAL, cfg, page_range=(1, 5))
-    scanned = classify_pages(DIGITAL)
+    converted = convert(DIGITAL, cfg, page_range=(1, 5))
+    doc, timings, scanned = converted.document, converted.timings, converted.scanned
     store = ArtifactStore(tmp_path)
     gazette_id = "rag_test"
     store.write(

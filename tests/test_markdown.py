@@ -18,8 +18,8 @@ from typer.testing import CliRunner
 
 from bakasur.cli import app
 from bakasur.config import Settings
+from bakasur.core.convert import build_converter
 from bakasur.parse.markdown import (
-    build_markdown_converter,
     convert_to_markdown,
     document_to_markdown,
 )
@@ -63,7 +63,7 @@ def test_document_without_pages_has_no_markers():
 
 
 def test_converter_ocrs_pdfs_and_images_with_rapidocr():
-    converter = build_markdown_converter(Settings())
+    converter = build_converter(Settings())
     for fmt in (InputFormat.PDF, InputFormat.IMAGE):
         ocr = converter.format_to_options[fmt].pipeline_options.ocr_options
         assert isinstance(ocr, RapidOcrOptions)
@@ -118,7 +118,7 @@ def batch(tmp_path: Path, monkeypatch):
     src.mkdir()
     for name in ("MoM 001 (1999).pdf", "MoM 002 (2000).pdf", "notes.txt"):
         (src / name).write_text(name)
-    monkeypatch.setattr("bakasur.parse.markdown.build_markdown_converter", _stub_converter)
+    monkeypatch.setattr("bakasur.parse.markdown.build_converter", _stub_converter)
 
     def run(*args: str):
         return CliRunner().invoke(app, ["to-md-batch", str(src), "-o", str(tmp_path / "out"), *args])

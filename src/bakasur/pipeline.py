@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from bakasur.config import Settings
+from bakasur.core.convert import convert
 from bakasur.extract import extract_39a_from_artifacts
 from bakasur.gazette.header import gazette_info
 from bakasur.ledger import Ledger
@@ -25,7 +26,6 @@ from bakasur.normalize.rows import explode_plots
 from bakasur.normalize.villages import VillageLookup
 from bakasur.notify.email import EmailNotifier
 from bakasur.parse.artifacts import ArtifactStore
-from bakasur.parse.runner import parse_gazette_pdf
 from bakasur.sinks.files import FileSink
 from bakasur.sinks.master import master_rows
 from bakasur.sinks.sheets import SheetsSink
@@ -109,15 +109,15 @@ class Pipeline:
 
         try:
             if not self.store.exists(gazette_id):
-                doc, timings, scanned, orientations = parse_gazette_pdf(pdf_path, self.cfg)
+                converted = convert(pdf_path, self.cfg, page_images=True)
                 artifact_dir = self.store.write(
                     gazette_id,
                     pdf_path,
-                    doc,
+                    converted.document,
                     sha256=sha,
-                    timings=timings,
-                    scanned_pages=scanned,
-                    page_orientation=orientations,
+                    timings=converted.timings,
+                    scanned_pages=converted.scanned,
+                    page_orientation=converted.orientations,
                 )
                 self.ledger.update_status(
                     gazette_id,

@@ -37,7 +37,7 @@ complete, or write a `_SUCCESS`/sentinel file last and have `exists()` check tha
 
 ## 2. Silent failure: Docling can under-extract with no error at all
 
-`convert_pdf_batched` ([runner.py:67-78](../../src/bakasur/parse/runner.py#L67)) is a single
+`convert` ([converter.py](../../src/bakasur/core/convert/converter.py)) is a single
 Docling call with no per-page success tracking. If OCR misses a page, a table isn't detected,
 or a notification anchor isn't recognized, `write()` still completes cleanly and `meta.json`
 still gets written — there's no check that what was extracted matches what's actually in the

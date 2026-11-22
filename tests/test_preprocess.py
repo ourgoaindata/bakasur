@@ -5,10 +5,9 @@ from pathlib import Path
 import pypdfium2 as pdfium
 
 from bakasur.config import Settings
-from bakasur.parse import runner
-from bakasur.parse.pageinfo import classify_pages, count_page_chars
-from bakasur.parse.preprocess import build_preprocessed_pdf
-from bakasur.parse.runner import parse_gazette_pdf, resolve_input_pdf
+from bakasur.core.convert.pageinfo import classify_pages, count_page_chars
+from bakasur.core.convert.preprocess import build_preprocessed_pdf
+from bakasur.core.convert import convert, prepare_input
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 DIGITAL = FIXTURES / (
@@ -49,7 +48,7 @@ def test_only_scanned_pages_are_rasterized(tmp_path: Path):
     assert classify_pages(src) == {1: False, 2: True, 3: False}
 
     cfg = Settings(preprocess_scans=True, fix_orientation=False)
-    out = resolve_input_pdf(src, cfg, classify_pages(src), tmp_path).path
+    out = prepare_input(src, cfg, tmp_path).path
 
     assert out != src
     assert _page_sizes(out) == _page_sizes(src)
@@ -75,7 +74,7 @@ def test_rasterized_page_is_binarized(tmp_path: Path):
 
 def test_digital_pdf_is_not_preprocessed(tmp_path: Path):
     cfg = Settings(preprocess_scans=True)
-    prepared = resolve_input_pdf(DIGITAL, cfg, classify_pages(DIGITAL), tmp_path)
+    prepared = prepare_input(DIGITAL, cfg, tmp_path)
     assert prepared.path == DIGITAL and prepared.orientations == []
 
 
@@ -86,13 +85,15 @@ def test_preprocessed_pdf_is_not_left_next_to_source(tmp_path: Path, monkeypatch
     src = _mixed_pdf(inbox / "mixed.pdf")
     converted: list[Path] = []
 
-    def fake_convert(pdf_path: Path, cfg: Settings):
-        assert pdf_path.exists()
-        converted.append(pdf_path)
-        return None, {}
+    class FakeConverter:
+        def convert(self, pdf_path: str):
+            assert Path(pdf_path).exists()
+            converted.append(Path(pdf_path))
+            return type("R", (), {"document": None})()
 
-    monkeypatch.setattr(runner, "convert_pdf_batched", fake_convert)
-    parse_gazette_pdf(src, Settings(preprocess_scans=True, fix_orientation=False))
+    convert(
+        src, Settings(preprocess_scans=True, fix_orientation=False), converter=FakeConverter()
+    )
 
     assert len(converted) == 1 and converted[0] != src
     assert converted[0].parent != inbox

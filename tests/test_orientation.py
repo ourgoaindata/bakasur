@@ -11,10 +11,10 @@ from PIL import Image
 
 from bakasur.config import Settings
 from bakasur.parse.markdown import BatchResult, document_to_markdown
-from bakasur.parse.orientation import REC_DPI, Orientation, OrientationDetector
-from bakasur.parse.pageinfo import classify_pages, count_page_chars, image_pages
-from bakasur.parse.preprocess import prepare_pdf
-from bakasur.parse.runner import resolve_input_pdf
+from bakasur.core.convert.orientation import REC_DPI, Orientation, OrientationDetector
+from bakasur.core.convert.pageinfo import classify_pages, count_page_chars, image_pages
+from bakasur.core.convert import prepare_input
+from bakasur.core.convert.preprocess import prepare_pdf
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 SCANNED = FIXTURES / (
@@ -168,7 +168,9 @@ def _sizes(path: Path) -> list[tuple[float, float]]:
 def test_sideways_scanned_page_is_rewritten_upright(tmp_path: Path):
     src = _mixed_pdf(tmp_path / "mixed.pdf")
     cfg = Settings(fix_orientation=True)
-    prepared = resolve_input_pdf(src, cfg, classify_pages(src), tmp_path, _FixedDetector(90))
+    prepared = prepare_input(
+        src, cfg, tmp_path, scanned=classify_pages(src), detector=_FixedDetector(90)
+    )
 
     assert prepared.path != src
     assert [o.page_no for o in prepared.rotated] == [2]  # only the scanned page is checked
@@ -180,7 +182,9 @@ def test_sideways_scanned_page_is_rewritten_upright(tmp_path: Path):
 
 def test_upright_scans_are_not_copied(tmp_path: Path):
     src = _mixed_pdf(tmp_path / "mixed.pdf")
-    prepared = resolve_input_pdf(src, Settings(), classify_pages(src), tmp_path, _FixedDetector(0))
+    prepared = prepare_input(
+        src, Settings(), tmp_path, scanned=classify_pages(src), detector=_FixedDetector(0)
+    )
     assert prepared.path == src
     assert len(prepared.orientations) == 1
     assert list(tmp_path.iterdir()) == [src]
@@ -189,7 +193,9 @@ def test_upright_scans_are_not_copied(tmp_path: Path):
 def test_orientation_check_can_be_turned_off(tmp_path: Path):
     src = _mixed_pdf(tmp_path / "mixed.pdf")
     cfg = Settings(fix_orientation=False)
-    prepared = resolve_input_pdf(src, cfg, classify_pages(src), tmp_path, _FixedDetector(90))
+    prepared = prepare_input(
+        src, cfg, tmp_path, scanned=classify_pages(src), detector=_FixedDetector(90)
+    )
     assert prepared.path == src and prepared.orientations == []
 
 
@@ -271,8 +277,10 @@ def test_scan_with_embedded_text_layer_is_still_checked(tmp_path: Path):
     assert classify_pages(layered)[2] is False  # counted as digital...
     assert image_pages(layered) == {1: False, 2: True, 3: False}  # ...but it is an image
 
-    prepared = resolve_input_pdf(
-        layered, Settings(), classify_pages(layered), tmp_path, _FixedDetector(90)
+    prepared = prepare_input(
+
+        layered, Settings(), tmp_path, scanned=classify_pages(layered), detector=_FixedDetector(90)
+
     )
     assert [o.page_no for o in prepared.orientations] == [2]
     assert prepared.path != layered

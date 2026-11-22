@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from bakasur.config import Settings, get_settings
+from bakasur.core.convert import convert
 from bakasur.extract import extract_39a_from_artifacts
 from bakasur.gazette.header import gazette_info
 from bakasur.inbox.watcher import InboxWatcher
@@ -20,7 +21,6 @@ from bakasur.parse.markdown import (
     convert_directory,
     convert_to_markdown_with_orientation,
 )
-from bakasur.parse.runner import parse_gazette_pdf
 from bakasur.pipeline import Pipeline, publishable_rows
 from bakasur.rag.chunk import chunk_from_artifact
 from bakasur.sinks.files import write_master_csv
@@ -69,20 +69,20 @@ def parse(
     cfg.ensure_dirs()
     sha = sha256_file(pdf)
     gid = gazette_id or gazette_id_from_path(pdf, sha)
-    doc, timings, scanned, orientations = parse_gazette_pdf(pdf, cfg)
+    converted = convert(pdf, cfg, page_images=True)
     store = ArtifactStore(cfg.gazettes_dir)
     out = store.write(
         gid,
         pdf,
-        doc,
+        converted.document,
         sha256=sha,
-        timings=timings,
-        scanned_pages=scanned,
-        page_orientation=orientations,
+        timings=converted.timings,
+        scanned_pages=converted.scanned,
+        page_orientation=converted.orientations,
     )
-    console.print(f"Wrote artifacts to {out} ({doc.num_pages()} pages)")
-    if timings:
-        console.print(f"Timings: {timings}")
+    console.print(f"Wrote artifacts to {out} ({converted.document.num_pages()} pages)")
+    if converted.timings:
+        console.print(f"Timings: {converted.timings}")
 
 
 @app.command("to-md")
@@ -270,16 +270,8 @@ def spike_parse_cmd(
     cfg.profile_timings = True
     pr = _parse_page_range(page_range)
 
-    from docling.datamodel.settings import settings as docling_settings
-
-    docling_settings.debug.profile_pipeline_timings = True
-
-    if pr:
-        from bakasur.parse.runner import convert_pdf
-
-        doc, timings = convert_pdf(pdf, cfg, page_range=pr)
-    else:
-        doc, timings, _, _ = parse_gazette_pdf(pdf, cfg)
+    converted = convert(pdf, cfg, page_range=pr, page_images=True)
+    doc, timings = converted.document, converted.timings
 
     first_page = min(doc.pages.keys()) if doc.pages else 1
     text_default = doc.export_to_text(page_no=first_page, traverse_pictures=False)

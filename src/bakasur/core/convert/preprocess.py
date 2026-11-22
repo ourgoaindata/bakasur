@@ -11,7 +11,7 @@ import numpy as np
 import pypdfium2 as pdfium
 from PIL import Image
 
-from bakasur.parse.orientation import Orientation, OrientationDetector, detect_orientations
+from bakasur.core.convert.orientation import Orientation, OrientationDetector, detect_orientations
 
 
 def render_page_gray(page: pdfium.PdfPage, dpi: int = 300) -> np.ndarray:
