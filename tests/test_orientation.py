@@ -10,7 +10,7 @@ import pytest
 from PIL import Image
 
 from bakasur.config import Settings
-from bakasur.parse.markdown import document_to_markdown
+from bakasur.parse.markdown import BatchResult, document_to_markdown
 from bakasur.parse.orientation import REC_DPI, Orientation, OrientationDetector
 from bakasur.parse.pageinfo import classify_pages, count_page_chars, image_pages
 from bakasur.parse.preprocess import prepare_pdf
@@ -230,6 +230,20 @@ def test_markdown_notes_rotated_and_uncertain_pages():
     assert page1 == "[Page 1]\n\na"  # nothing to say about an upright page
     assert page2.startswith("[Page 2]\n\n<!-- bakasur: page rotated 90°")
     assert page3.startswith("[Page 3]\n\n> **Orientation uncertain:**")
+
+
+def test_batch_log_summarises_orientation():
+    result = BatchResult(
+        Path("x.pdf"),
+        "converted",
+        orientations=[
+            Orientation(38, 90, True, "r"),
+            Orientation(12, 0, False, "r"),
+            Orientation(1, 0, True, "r"),
+        ],
+    )
+    assert result.orientation_summary() == "rotated p38; orientation uncertain p12"
+    assert BatchResult(Path("y.pdf"), "converted").orientation_summary() == ""
 
 
 def _add_text_layer(src: Path, out: Path, page_index: int, text: str) -> Path:

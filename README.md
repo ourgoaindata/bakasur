@@ -37,11 +37,17 @@ uv run bakasur spike-parse fixtures/your.pdf --page-range 1-5
 uv run bakasur extract-39a <gazette_id>
 uv run bakasur chunk-rag <gazette_id>
 uv run bakasur to-md any/file.pdf            # writes any/file.md; -o - for stdout
+uv run bakasur to-md-batch in_dir -o out_dir # out_dir/<name>/<name>.pdf + <name>.md for each *.pdf
 ```
 
 `to-md` converts any file Docling reads (PDF, images, docx, pptx, xlsx, html, ...) to Markdown,
 OCRing scans with RapidOCR. Paginated inputs get a `[Page N]` marker before each page's content,
 numbered as in the source file, so quotes can be checked against the original.
+
+`to-md-batch` does the same for every file matching `--glob` (default `*.pdf`) in a folder,
+loading the models once. Each file gets its own `<out_dir>/<name>/` folder holding a copy of the
+source and its Markdown. Finished files are skipped on a re-run (`--overwrite` redoes them), a
+failing file doesn't stop the batch, and progress is also appended to `<out_dir>/_batch.log`.
 
 Before OCR, every image-based PDF page (including scans that carry their own OCR text layer)
 is checked for orientation, and pages scanned sideways or upside down are turned upright, so a
@@ -49,9 +55,9 @@ table printed landscape on a portrait page is read properly. Detection uses Rapi
 direction of the detected text lines says upright vs sideways, and reading the longest lines at
 the candidate angles picks the direction. Turned pages get an HTML comment under their
 `[Page N]` marker. Pages the check is unsure about get a visible
-`> **Orientation uncertain:**` line and are listed on stderr and in the artifact `meta.json`
-(`page_orientation`), for a check by hand. Set `FIX_ORIENTATION=false` to turn the check off.
-See [orientation.py](src/bakasur/parse/orientation.py) for the thresholds.
+`> **Orientation uncertain:**` line and are listed on stderr, in `_batch.log`, and in the
+artifact `meta.json` (`page_orientation`), for a check by hand. Set `FIX_ORIENTATION=false` to
+turn the check off. See [orientation.py](src/bakasur/parse/orientation.py) for the thresholds.
 
 ## How extraction works
 
