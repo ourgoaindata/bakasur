@@ -1,7 +1,7 @@
 [project]
 name = "bakasur"
 version = "0.1.0"
-description = "Goa Official Gazette Section 39A table extractor"
+description = "Parse Goa government documents with Docling: Section 39A land conversions, GCZMA minutes"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

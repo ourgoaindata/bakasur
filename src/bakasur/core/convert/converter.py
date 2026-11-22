@@ -28,7 +28,7 @@ from docling.datamodel.settings import settings
 from docling.document_converter import DocumentConverter, ImageFormatOption, PdfFormatOption
 from docling_core.types.doc import DoclingDocument
 
-from bakasur.config import Settings
+from bakasur.core.config import CoreSettings
 from bakasur.core.convert.orientation import Orientation, OrientationDetector
 from bakasur.core.convert.pageinfo import classify_pages, image_pages
 from bakasur.core.convert.preprocess import PreparedPdf, prepare_pdf
@@ -36,7 +36,7 @@ from bakasur.core.convert.preprocess import PreparedPdf, prepare_pdf
 logger = logging.getLogger(__name__)
 
 
-def build_ocr_options(cfg: Settings, *, force_ocr: bool = False) -> OcrOptions:
+def build_ocr_options(cfg: CoreSettings, *, force_ocr: bool = False) -> OcrOptions:
     # Full-page OCR ignores any embedded text layer; the default OCRs only image regions.
     mode = {"mode": OcrMode.FULL_PAGE} if force_ocr else {}
     if cfg.ocr_engine == "ocrmac":
@@ -56,7 +56,7 @@ def build_ocr_options(cfg: Settings, *, force_ocr: bool = False) -> OcrOptions:
 
 
 def build_converter(
-    cfg: Settings, *, force_ocr: bool = False, page_images: bool = False
+    cfg: CoreSettings, *, force_ocr: bool = False, page_images: bool = False
 ) -> DocumentConverter:
     """
     PDFs and images go through layout, TableFormer (accurate mode) and OCR; other formats
@@ -99,7 +99,7 @@ class Converted:
 
 def prepare_input(
     path: Path,
-    cfg: Settings,
+    cfg: CoreSettings,
     out_dir: Path,
     *,
     scanned: dict[int, bool] | None = None,
@@ -145,7 +145,7 @@ def _scanned_pages(path: Path) -> dict[int, bool]:
 
 def convert(
     path: Path,
-    cfg: Settings,
+    cfg: CoreSettings,
     *,
     converter: Any = None,
     page_range: tuple[int, int] | None = None,

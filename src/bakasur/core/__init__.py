@@ -1,1 +1,1 @@
-"""Document-agnostic machinery: Docling conversion, OCR, scan preparation."""
+"""Document conversion and plumbing shared by every use case; never imports from usecases."""
