@@ -35,6 +35,7 @@ uv run bakasur status
 uv run bakasur parse fixtures/your.pdf
 uv run bakasur spike-parse fixtures/your.pdf --page-range 1-5
 uv run bakasur extract-39a <gazette_id>
+uv run bakasur export-master <gazette_id>   # data/out/<gazette_id>.master.csv
 uv run bakasur chunk-rag <gazette_id>
 uv run bakasur to-md any/file.pdf            # writes any/file.md; -o - for stdout
 uv run bakasur to-md-batch in_dir -o out_dir # out_dir/<name>/<name>.pdf + <name>.md for each *.pdf
@@ -58,6 +59,11 @@ the candidate angles picks the direction. Turned pages get an HTML comment under
 `> **Orientation uncertain:**` line and are listed on stderr, in `_batch.log`, and in the
 artifact `meta.json` (`page_orientation`), for a check by hand. Set `FIX_ORIENTATION=false` to
 turn the check off. See [orientation.py](src/bakasur/parse/orientation.py) for the thresholds.
+
+Each run also writes `data/out/run_*.master.csv`: the run's change-of-zone rows in the column
+layout of the "Substantive Objections" tab of the 39A master sheet. `export-master` writes the
+same file for a gazette already in the artifact store, even if the ledger has it as processed.
+See [docs/master-csv.md](docs/master-csv.md) for where each column comes from.
 
 ## How extraction works
 

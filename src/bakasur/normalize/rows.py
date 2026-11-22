@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from bakasur.models import ApplicationRow, PlotRow, TableVariant
-from bakasur.normalize.area import extract_total_area, parse_indian_int
+from bakasur.normalize.area import extract_total_area, parse_area
 from bakasur.normalize.place import split_village_taluka
 from bakasur.normalize.survey import expand_survey_raw
 from bakasur.utils import sha256_text
@@ -36,7 +36,7 @@ def build_application_row(
         existing_use=existing,
         total_area_sqm=extract_total_area(existing),
         proposed_use=proposed,
-        area_proposed_sqm=parse_indian_int(raw.get("area_proposed")),
+        area_proposed_sqm=parse_area(raw.get("area_proposed")),
         decision=raw.get("decision"),
         page_from=page_from,
         page_to=page_to,

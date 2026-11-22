@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from bakasur.config import Settings
 from bakasur.gazette.anchors import AnchorConfig, find_notification_spans
+from bakasur.gazette.header import notification_date
 from bakasur.gazette.tables import (
     apply_column_map,
     infer_variant,
@@ -48,6 +49,7 @@ def extract_39a_from_artifacts(
 
     rows: list[ApplicationRow] = []
     for span in spans:
+        signed = notification_date(page_texts, span)
         span_tables = tables_in_span(tables, span)
         for table in stitch_tables(span_tables, cfg.running_text_patterns):
             header_row, data_rows = split_header(table)
@@ -83,6 +85,7 @@ def extract_39a_from_artifacts(
                 if idx in disputed:
                     reasons.append(DISPUTED_SPLIT_REASON)
                 row.review_reason = " ".join(reasons) or None
+                row.notification_date = signed
                 rows.append(row)
 
     plots: list[PlotRow] = []

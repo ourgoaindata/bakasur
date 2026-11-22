@@ -63,6 +63,8 @@ class Settings(BaseSettings):
             r"^SERIES\s+[IVX]+\s+No\.?\s*\d+",
             r"^\d{1,2}\s*(ST|ND|RD|TH)\s+[A-Z]+,?\s+\d{4}$",
             r"^\d{1,5}$",
+            r"^Suggestions\s+are\s+welcomed\s+on\s+e-?mail\b",  # footer on every page
+            r"^TABLE$",  # the table's caption, which Docling can place after the table
         ]
     )
 

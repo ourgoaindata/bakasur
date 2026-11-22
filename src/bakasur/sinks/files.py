@@ -9,6 +9,7 @@ from pathlib import Path
 
 from bakasur.models import ApplicationRow, PlotRow, ValidationIssue
 from bakasur.sinks.base import OutputSink
+from bakasur.sinks.master import MASTER_HEADER
 
 
 class FileSink:
@@ -21,6 +22,7 @@ class FileSink:
         rows: list[ApplicationRow],
         plots: list[PlotRow],
         review: list[ValidationIssue],
+        master: list[list[str]] | None = None,
     ) -> int:
         if not rows and not review:
             return 0
@@ -33,6 +35,8 @@ class FileSink:
                 base.with_suffix(".rows.csv"),
                 [r.to_dict() for r in rows],
             )
+        if master:
+            write_master_csv(base.with_suffix(".master.csv"), master)
         if plots:
             self._write_json(base.with_suffix(".plots.json"), [p.to_dict() for p in plots])
         if review:
@@ -61,3 +65,11 @@ class FileSink:
             writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
             writer.writeheader()
             writer.writerows(rows)
+
+
+def write_master_csv(path: Path, rows: list[list[str]]) -> None:
+    """Header row then data, in the master sheet's column order."""
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(MASTER_HEADER)
+        writer.writerows(rows)

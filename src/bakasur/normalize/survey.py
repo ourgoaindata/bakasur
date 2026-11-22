@@ -15,6 +15,26 @@ SINGLE_RE = re.compile(
     re.I,
 )
 PLOT_RE = re.compile(r"Plot\s+No\.?\s*([A-Za-z0-9\-]+)", re.I)
+PLOT_LABEL_RE = re.compile(r"Plot\s*(?:No\.?)?\s*([A-Za-z0-9][A-Za-z0-9\-]*)?", re.I)
+# "(P)", "(Part)", or a named part such as "(Part A)".
+PART_RE = re.compile(r"\(\s*(?:P|Part|pt)\.?(?:\s+([A-Za-z0-9\-]+))?\s*\)", re.I)
+# Docling keeps the hyphen of a survey number wrapped across lines: "49/1- -A75", "196A/1- D".
+WRAPPED_HYPHEN_RE = re.compile(r"(?<=\w)-\s*(?:-\s*)?(?=\w)")
+
+
+def split_survey(survey_raw: str | None) -> tuple[str, str]:
+    """("74/1, Plot No. 16 (Part)") -> ("74/1", "(part) (plot 16)"), for "S. No." and "Sub -Div"."""
+    text = WRAPPED_HYPHEN_RE.sub("-", re.sub(r"\s+", " ", survey_raw or ""))
+    parts = [f"(part {m.group(1)})" if m.group(1) else "(part)" for m in PART_RE.finditer(text)]
+    plots = [m.group(1) for m in PLOT_LABEL_RE.finditer(text) if m.group(1)]
+    survey = PLOT_LABEL_RE.sub("", PART_RE.sub("", text))
+    qualifiers = list(dict.fromkeys(parts)) + [f"(plot {p})" for p in plots]
+    return re.sub(r"\s+", " ", survey).strip(" ,"), " ".join(qualifiers)
+
+
+def leading_survey_number(survey: str | None) -> int | None:
+    m = re.match(r"\s*(\d+)", survey or "")
+    return int(m.group(1)) if m else None
 
 
 @dataclass
