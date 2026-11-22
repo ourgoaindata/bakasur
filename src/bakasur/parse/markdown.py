@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,12 @@ from docling_core.types.doc import DoclingDocument
 
 from bakasur.config import Settings
 from bakasur.parse.artifacts import TRAVERSE_PICTURES
+from bakasur.parse.orientation import Orientation, OrientationDetector
+from bakasur.parse.pageinfo import classify_pages, image_pages
+from bakasur.parse.preprocess import PreparedPdf, prepare_pdf
+
+# The Markdown converter runs RapidOCR on torch (see build_markdown_converter).
+OCR_BACKEND = "torch"
 
 
 def build_markdown_converter(cfg: Settings, *, force_ocr: bool = False) -> DocumentConverter:
@@ -27,7 +35,7 @@ def build_markdown_converter(cfg: Settings, *, force_ocr: bool = False) -> Docum
     ocr_options = RapidOcrOptions(
         lang=["en"],
         # torch ships with docling; RapidOCR's default onnxruntime is not installed.
-        backend="torch",
+        backend=OCR_BACKEND,
         scale=cfg.ocr_scale,
         force_full_page_ocr=force_ocr,
         # The 180° line classifier flips some wide, letter-spaced lines in layout crops and
@@ -55,19 +63,77 @@ def page_marker(page_no: int) -> str:
     return f"[Page {page_no}]"
 
 
-def document_to_markdown(doc: DoclingDocument) -> str:
+def orientation_note(o: Orientation) -> str:
+    """
+    A note under the page marker. A page turned with confidence gets an HTML comment, so it
+    stays out of the rendered text; an uncertain one gets a visible line asking for a check.
+    """
+    if not o.confident:
+        return f"> **Orientation uncertain:** page {o.describe()}. Check it against the PDF."
+    return f"<!-- bakasur: page {o.describe()} before OCR -->"
+
+
+def document_to_markdown(
+    doc: DoclingDocument, orientations: Iterable[Orientation] = ()
+) -> str:
     """
     Markdown with a page marker ahead of each page's content, numbered as in the source
     file, so text quoted from the Markdown can be checked against the original.
-    Formats without pages (docx, html, ...) are exported without markers.
+    Formats without pages (docx, html, ...) are exported without markers. Pages that were
+    turned upright, or whose orientation is uncertain, get a note under their marker.
     """
     if not doc.pages:
         return doc.export_to_markdown(traverse_pictures=TRAVERSE_PICTURES)
+    notes = {o.page_no: orientation_note(o) for o in orientations if o.rotation or not o.confident}
     sections = []
     for page_no in sorted(doc.pages):
         body = doc.export_to_markdown(page_no=page_no, traverse_pictures=TRAVERSE_PICTURES)
-        sections.append(f"{page_marker(page_no)}\n\n{body}".rstrip())
+        head = page_marker(page_no)
+        if page_no in notes:
+            head += f"\n\n{notes[page_no]}"
+        sections.append(f"{head}\n\n{body}".rstrip())
     return "\n\n---\n\n".join(sections) + "\n"
+
+
+def _prepare(
+    path: Path,
+    cfg: Settings,
+    tmp_dir: Path,
+    page_range: tuple[int, int] | None,
+    detector: OrientationDetector | None,
+) -> PreparedPdf:
+    """Turn sideways image-based pages of a PDF upright; other inputs pass through untouched."""
+    if not cfg.fix_orientation or path.suffix.lower() != ".pdf":
+        return PreparedPdf(path)
+    try:
+        scanned = classify_pages(path)
+        images = image_pages(path)
+    except Exception:
+        return PreparedPdf(path)  # not a readable PDF; let Docling report the real error
+    first, last = page_range or (1, len(scanned))
+    indices = [n - 1 for n in scanned if (scanned[n] or images.get(n)) and first <= n <= last]
+    return prepare_pdf(
+        path,
+        tmp_dir / f"{path.stem}.upright.pdf",
+        orient_indices=indices,
+        detector=detector or OrientationDetector(OCR_BACKEND),
+    )
+
+
+def convert_file(
+    converter: Any,
+    path: Path,
+    cfg: Settings,
+    *,
+    page_range: tuple[int, int] | None = None,
+    detector: OrientationDetector | None = None,
+) -> tuple[str, list[Orientation]]:
+    """Markdown for one file, plus what the orientation check found on its scanned pages."""
+    with tempfile.TemporaryDirectory(prefix="bakasur-to-md-") as tmp:
+        prepared = _prepare(path, cfg, Path(tmp), page_range, detector)
+        kwargs: dict[str, Any] = {"page_range": page_range} if page_range else {}
+        doc = converter.convert(str(prepared.path), **kwargs).document
+    return document_to_markdown(doc, prepared.orientations), prepared.orientations
 
 
 def convert_to_markdown(
@@ -77,9 +143,17 @@ def convert_to_markdown(
     force_ocr: bool = False,
     page_range: tuple[int, int] | None = None,
 ) -> str:
+    return convert_to_markdown_with_orientation(
+        path, cfg, force_ocr=force_ocr, page_range=page_range
+    )[0]
+
+
+def convert_to_markdown_with_orientation(
+    path: Path,
+    cfg: Settings,
+    *,
+    force_ocr: bool = False,
+    page_range: tuple[int, int] | None = None,
+) -> tuple[str, list[Orientation]]:
     converter = build_markdown_converter(cfg, force_ocr=force_ocr)
-    kwargs: dict[str, Any] = {}
-    if page_range:
-        kwargs["page_range"] = page_range
-    result = converter.convert(str(path), **kwargs)
-    return document_to_markdown(result.document)
+    return convert_file(converter, path, cfg, page_range=page_range)

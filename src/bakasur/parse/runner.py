@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -20,8 +21,11 @@ from docling.datamodel.settings import settings
 from docling_core.types.doc import DoclingDocument
 
 from bakasur.config import Settings
-from bakasur.parse.pageinfo import classify_pages, page_count
-from bakasur.parse.preprocess import build_preprocessed_pdf
+from bakasur.parse.pageinfo import classify_pages, image_pages, page_count
+from bakasur.parse.orientation import Orientation, OrientationDetector
+from bakasur.parse.preprocess import PreparedPdf, prepare_pdf
+
+logger = logging.getLogger(__name__)
 
 
 def build_ocr_options(cfg: Settings) -> OcrOptions:
@@ -94,28 +98,43 @@ def convert_pdf_batched(
 
 
 def resolve_input_pdf(
-    pdf_path: Path, cfg: Settings, scanned: dict[int, bool], out_dir: Path
-) -> Path:
+    pdf_path: Path,
+    cfg: Settings,
+    scanned: dict[int, bool],
+    out_dir: Path,
+    detector: OrientationDetector | None = None,
+) -> PreparedPdf:
     """
-    Optionally preprocess the scanned pages before conversion; digital pages pass through.
-    The preprocessed copy goes in out_dir, never next to the source: the source usually
-    sits in the watched inbox, where a new PDF would be picked up as another gazette.
+    Turn sideways scanned pages upright and optionally binarize them before conversion;
+    digital pages pass through. Orientation is checked on every image-based page, including
+    scans with an embedded text layer; binarization only touches pages without text. Any corrected copy goes in out_dir, never next to the
+    source: the source usually sits in the watched inbox, where a new PDF would be picked
+    up as another gazette.
     """
-    if not cfg.preprocess_scans:
-        return pdf_path
     scanned_indices = [page_no - 1 for page_no, is_scanned in scanned.items() if is_scanned]
-    if not scanned_indices:
-        return pdf_path
-    out = out_dir / f"{pdf_path.stem}.preprocessed.pdf"
-    return build_preprocessed_pdf(pdf_path, out, page_indices=scanned_indices)
+    orient_indices: list[int] = []
+    if cfg.fix_orientation:
+        # Scans with an embedded text layer are not "scanned" by character count.
+        images = image_pages(pdf_path)
+        orient_indices = [n - 1 for n in scanned if scanned[n] or images.get(n)]
+    return prepare_pdf(
+        pdf_path,
+        out_dir / f"{pdf_path.stem}.preprocessed.pdf",
+        binarize_indices=scanned_indices if cfg.preprocess_scans else [],
+        orient_indices=orient_indices,
+        detector=detector or OrientationDetector(cfg.rapidocr_backend),
+    )
 
 
 def parse_gazette_pdf(
     pdf_path: Path,
     cfg: Settings,
-) -> tuple[DoclingDocument, dict[str, Any], dict[int, bool]]:
+) -> tuple[DoclingDocument, dict[str, Any], dict[int, bool], list[Orientation]]:
+    """Returns the document, timings, page -> is_scanned, and each scanned page's orientation."""
     scanned_map = classify_pages(pdf_path)
     with tempfile.TemporaryDirectory(prefix="bakasur-preprocess-") as tmp:
-        input_pdf = resolve_input_pdf(pdf_path, cfg, scanned_map, Path(tmp))
-        doc, timings = convert_pdf_batched(input_pdf, cfg)
-    return doc, timings, scanned_map
+        prepared = resolve_input_pdf(pdf_path, cfg, scanned_map, Path(tmp))
+        doc, timings = convert_pdf_batched(prepared.path, cfg)
+    for o in prepared.uncertain:
+        logger.warning("%s page %d: %s", pdf_path.name, o.page_no, o.describe())
+    return doc, timings, scanned_map, prepared.orientations
