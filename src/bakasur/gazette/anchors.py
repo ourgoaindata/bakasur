@@ -110,7 +110,9 @@ def find_notification_spans(
             while j < len(pages):
                 next_page = pages[j]
                 next_text = prose[next_page]
-                if _matches_any(next_text, cfg.span_end_patterns) and next_page > start + 1:
+                # The closing paragraph mentions "Change of zone" itself, so it must be
+                # checked before the anchors, even on the page right after the start.
+                if _matches_any(next_text, cfg.span_end_patterns):
                     end = next_page
                     break
                 if _matches_any(next_text, cfg.anchor_patterns) and next_page > start:

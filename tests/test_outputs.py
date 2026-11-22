@@ -1,5 +1,6 @@
 """Sheets outbox retries and email notifications."""
 
+import csv
 from pathlib import Path
 
 import pytest
@@ -12,12 +13,16 @@ from bakasur.pipeline import Pipeline
 from bakasur.sinks.sheets import SheetsSink
 
 
-def _row(sr_no: str, survey: str | None = "74/1") -> ApplicationRow:
+def _row(
+    sr_no: str,
+    survey: str | None = "74/1",
+    variant: TableVariant = TableVariant.CHANGE_OF_ZONE,
+) -> ApplicationRow:
     row = ApplicationRow(
         gazette_id="g1",
         source_filename="g1.pdf",
         notification_no="N1",
-        table_variant=TableVariant.CHANGE_OF_ZONE,
+        table_variant=variant,
         sr_no=sr_no,
         applicant="A",
         survey_raw=survey,
@@ -104,6 +109,37 @@ def test_sheets_success_leaves_nothing_queued(pipeline, monkeypatch):
     assert result["sheets_pending"] == 0
     assert pipeline.ledger.count_pending_sheets() == 0
     assert len(pipeline.sheets.appended["rows"]) == 1
+
+
+def test_only_change_of_zone_rows_are_written(pipeline, monkeypatch):
+    ndz = _row("2.", variant=TableVariant.NDZ)
+    ndz_invalid = _row("3.", survey=None, variant=TableVariant.NDZ)
+    _set_rows(monkeypatch, [_row("1."), ndz, ndz_invalid])
+
+    result = pipeline.process_pdf(_drop_pdf(pipeline))
+
+    assert result["rows"] == 1
+    assert result["review_issues"] == 0
+    assert [r["sr_no"] for r in pipeline.sheets.appended["rows"]] == ["1."]
+    assert {p["sr_no"] for p in pipeline.sheets.appended["plots"]} == {"1."}
+    assert "review" not in pipeline.sheets.appended
+    (csv_path,) = pipeline.cfg.out_dir.glob("*.rows.csv")
+    with csv_path.open(encoding="utf-8") as f:
+        assert [r["sr_no"] for r in csv.DictReader(f)] == ["1."]
+    (master_path,) = pipeline.cfg.out_dir.glob("*.master.csv")
+    with master_path.open(encoding="utf-8") as f:
+        assert [r["Sr No"] for r in csv.DictReader(f)] == ["1"]
+    assert not pipeline.ledger.is_row_emitted(ndz.row_hash)
+
+
+def test_ndz_only_gazette_sends_no_digest(pipeline, monkeypatch):
+    _set_rows(monkeypatch, [_row("1.", variant=TableVariant.NDZ)])
+    sent = _capture(pipeline.email)
+
+    result = pipeline.process_pdf(_drop_pdf(pipeline))
+
+    assert result["status"] == "completed"
+    assert sent == []
 
 
 def test_email_failure_does_not_fail_gazette(pipeline, monkeypatch):

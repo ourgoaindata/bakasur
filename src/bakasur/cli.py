@@ -9,14 +9,18 @@ from rich.console import Console
 from rich.table import Table
 
 from bakasur.config import Settings, get_settings
+from bakasur.extract import extract_39a_from_artifacts
+from bakasur.gazette.header import gazette_info
 from bakasur.inbox.watcher import InboxWatcher
 from bakasur.ledger import Ledger
 from bakasur.models import GazetteStatus
 from bakasur.parse.artifacts import ArtifactStore
 from bakasur.parse.markdown import convert_to_markdown
 from bakasur.parse.runner import parse_gazette_pdf
-from bakasur.pipeline import Pipeline
+from bakasur.pipeline import Pipeline, publishable_rows
 from bakasur.rag.chunk import chunk_from_artifact
+from bakasur.sinks.files import write_master_csv
+from bakasur.sinks.master import master_rows
 from bakasur.utils import gazette_id_from_path, sha256_file
 
 app = typer.Typer(no_args_is_help=True, help="Goa Gazette 39A extractor")
@@ -114,6 +118,28 @@ def extract_39a_cmd(
         pipeline.store, gazette_id, cfg
     )
     console.print(f"Extracted {len(rows)} application rows, {len(plots)} plot rows")
+
+
+@app.command("export-master")
+def export_master_cmd(
+    gazette_id: str = typer.Argument(..., help="Gazette id in artifact store"),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="CSV path (default: data/out/<gazette_id>.master.csv)"
+    ),
+) -> None:
+    """Write a gazette's change-of-zone rows in the 39A master sheet's layout."""
+    cfg = get_settings()
+    pipeline = Pipeline(cfg)
+    extracted, _ = extract_39a_from_artifacts(pipeline.store, gazette_id, cfg)
+    rows, issues = publishable_rows(extracted)
+    gazette = gazette_info(
+        pipeline.store.load_page_texts(gazette_id), pipeline.store.load_meta(gazette_id)
+    )
+    out = output or cfg.out_dir / f"{gazette_id}.master.csv"
+    write_master_csv(out, master_rows(rows, gazette, pipeline.villages))
+    console.print(f"Wrote {len(rows)} row(s) to {out}")
+    if issues:
+        console.print(f"[yellow]{len(issues)} record(s) held for review and left out[/yellow]")
 
 
 @app.command("sync-sheets")

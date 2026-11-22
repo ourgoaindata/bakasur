@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from enum import Enum
 from typing import Any
 
@@ -37,6 +38,15 @@ class GazetteMetadata:
     issue_no: str | None = None
     gazette_date: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class GazetteInfo:
+    """Masthead details of one gazette issue."""
+
+    series: str | None  # "III"
+    issue_no: str | None
+    published: date | None
 
 
 @dataclass
@@ -96,9 +106,9 @@ class ApplicationRow:
     village: str | None
     taluka: str | None
     existing_use: str | None
-    total_area_sqm: int | None
+    total_area_sqm: int | float | None
     proposed_use: str | None
-    area_proposed_sqm: int | None
+    area_proposed_sqm: int | float | None
     decision: str | None
     page_from: int
     page_to: int
@@ -106,6 +116,8 @@ class ApplicationRow:
     row_hash: str = ""
     # Set when extraction suspects the row's data; validation then holds it for review.
     review_reason: str | None = None
+    # Date the notification was signed ("Panaji, 7th October, 2026."); not a sheet column.
+    notification_date: date | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {

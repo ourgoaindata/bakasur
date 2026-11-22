@@ -100,6 +100,24 @@ def test_closing_page_mentioning_section_39a_is_not_a_new_notification():
     assert [(s.page_start, s.page_end) for s in spans] == [(7, 9)]
 
 
+def test_closing_paragraph_on_the_page_after_the_start():
+    # OG29: the table runs from page 3 onto page 4, whose closing paragraph cites the
+    # "(Change of zone of land ...) Rules"; that must not start a new notification.
+    closing = (
+        "And whereas, in terms of sub-rule (1) of rule 4 of the Goa Town and Country Planning "
+        "(Change of zone of land in the Regional Plan or the Outline Development Plan) Rules, 2024"
+    )
+    pages = {
+        3: "Notification\n\nNo. 36/18/39A/Notification (78)/TCP/2026/1165\n\n" + TABLE_LINE,
+        4: "SERIES III No. 29\n\n" + TABLE_LINE + "\n\n" + closing,
+    }
+    tables = [_table(3, text_after=["TABLE"]), _table(4, text_after=[closing])]
+    spans = find_notification_spans(pages, _cfg(), tables)
+    assert [(s.notification_no, s.page_start, s.page_end) for s in spans] == [
+        ("36/18/39A/Notification (78)/TCP/2026/1165", 3, 4),
+    ]
+
+
 def test_new_notification_starting_on_closing_page():
     closing = "And whereas, in terms of sub-rule (1) of rule 4 of the said Rules"
     new_header = "Notification No. 36/18/39A/Notification (72)/TCP/2026/854"

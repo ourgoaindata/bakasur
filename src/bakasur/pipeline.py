@@ -12,13 +12,22 @@ from typing import Any, Literal, TypedDict
 
 from bakasur.config import Settings
 from bakasur.extract import extract_39a_from_artifacts
+from bakasur.gazette.header import gazette_info
 from bakasur.ledger import Ledger
-from bakasur.models import GazetteStatus, PipelineOutcome
+from bakasur.models import (
+    ApplicationRow,
+    GazetteStatus,
+    PipelineOutcome,
+    TableVariant,
+    ValidationIssue,
+)
 from bakasur.normalize.rows import explode_plots
+from bakasur.normalize.villages import VillageLookup
 from bakasur.notify.email import EmailNotifier
 from bakasur.parse.artifacts import ArtifactStore
 from bakasur.parse.runner import parse_gazette_pdf
 from bakasur.sinks.files import FileSink
+from bakasur.sinks.master import master_rows
 from bakasur.sinks.sheets import SheetsSink
 from bakasur.utils import gazette_id_from_path, sha256_file
 from bakasur.validate import partition_rows
@@ -57,6 +66,16 @@ class SheetsSyncResult(TypedDict):
 PipelineResult = SkippedResult | CompletedResult | FailedResult
 
 
+def publishable_rows(extracted: list[ApplicationRow]) -> tuple[list[ApplicationRow], list[ValidationIssue]]:
+    """Rows that pass validation, and issues for the review queue.
+
+    Only change-of-zone records are published (files, Sheets, review queue); NDZ records
+    stay in the gazette's artifacts and aren't marked emitted.
+    """
+    rows = [r for r in extracted if r.table_variant == TableVariant.CHANGE_OF_ZONE]
+    return partition_rows(rows)
+
+
 class Pipeline:
     def __init__(self, cfg: Settings) -> None:
         self.cfg = cfg
@@ -64,6 +83,7 @@ class Pipeline:
         self.ledger = Ledger(cfg.db_path)
         self.store = ArtifactStore(cfg.gazettes_dir)
         self.files = FileSink(cfg.out_dir)
+        self.villages = VillageLookup()
         self.sheets = SheetsSink(cfg)
         self.email = EmailNotifier(cfg)
 
@@ -113,8 +133,8 @@ class Pipeline:
                     page_count=meta.get("page_count"),
                 )
 
-            rows, _ = extract_39a_from_artifacts(self.store, gazette_id, self.cfg)
-            good_rows, issues = partition_rows(rows)
+            extracted, _ = extract_39a_from_artifacts(self.store, gazette_id, self.cfg)
+            good_rows, issues = publishable_rows(extracted)
             # Plots only from rows that passed validation, so rejected rows don't leak through.
             plots = [p for r in good_rows for p in explode_plots(r)]
 
@@ -127,7 +147,15 @@ class Pipeline:
                 if not self.ledger.is_row_emitted(p.row_hash)
             ]
 
-            appended = self.files.append_rows(new_rows, new_plots, issues)
+            gazette = gazette_info(
+                self.store.load_page_texts(gazette_id), self.store.load_meta(gazette_id)
+            )
+            appended = self.files.append_rows(
+                new_rows,
+                new_plots,
+                issues,
+                master=master_rows(new_rows, gazette, self.villages),
+            )
             # Queue for Sheets in the same transaction that marks rows emitted, so a
             # Sheets outage can't lose them; sync_sheets() retries until accepted.
             self.ledger.record_emitted(
@@ -165,7 +193,8 @@ class Pipeline:
             gazette_id,
             new_rows,
             issues,
-            extracted=len(rows),
+            # All 39A rows, so an NDZ-only gazette doesn't trigger "no rows found".
+            extracted=len(extracted),
             sheet_url=sheet_url,
             sheets_pending=sheets["pending"],
             sheets_error=sheets["error"],

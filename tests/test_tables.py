@@ -90,6 +90,26 @@ def test_long_body_text_mentioning_gazette_is_not_running_text():
     assert len(stitch_tables([t1, t2], RUNNING)) == 2
 
 
+def test_rule_line_after_table_is_not_body_text():
+    t1 = _table(7, [_row("5.", "A")], text_after=["_" * 90])
+    t2 = _table(8, [_row("6.", "B")])
+    assert len(stitch_tables([t1, t2], RUNNING)) == 1
+
+
+def test_suggestions_footer_after_table_is_running_text():
+    footer = "Suggestions are welcomed on e-mail: dir-gpps.goa@nic.in"
+    t1 = _table(7, [_row("5.", "A")], text_after=["_" * 90, footer])
+    t2 = _table(8, [_row("6.", "B")], text_before=[footer])
+    assert len(stitch_tables([t1, t2], RUNNING)) == 1
+
+
+def test_table_caption_after_table_is_not_body_text():
+    # OG29 page 3: Docling put the "TABLE" caption after the table it heads.
+    t1 = _table(7, [_row("9.", "A")], text_after=["TABLE"])
+    t2 = _table(8, [_row("10.", "B")])
+    assert len(stitch_tables([t1, t2], RUNNING)) == 1
+
+
 def test_no_stitch_when_next_table_has_different_header():
     t1 = _table(7, [_row("5.", "A")], header=HEADER)
     t2 = _table(8, [["x"] * 8], header=["Book No.", "Receipt Range", "Receipts", "Sub-Total", "", "", "", ""])

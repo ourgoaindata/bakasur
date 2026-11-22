@@ -28,7 +28,8 @@ PDF ─► 1. parse ─► 2. find 39A sections ─► 3. stitch tables ─► 4
 4. **Map columns.** Work out which column is the Sr. No., the survey numbers, the village, etc.
 5. **Merge continuation rows.** Text that spilled onto the next page is joined back onto its record.
 6. **Validate.** Good records go to the main sheet and are expanded into plots. Doubtful ones
-   go to the review queue.
+   go to the review queue. Only change-of-zone records are published; NDZ records are
+   extracted but never written to the CSV or the sheet.
 
 Steps 3–6 are covered below. The orchestration lives in
 [`extract.py`](../src/bakasur/extract.py).
@@ -236,7 +237,7 @@ Each record (`ApplicationRow`) has a `review_reason`. Extraction sets it when:
 | `DISPUTED_SPLIT_REASON` | The two merge rules disagreed about this record (step 5) |
 
 A record can carry both. Validation turns `review_reason` into a blocking issue
-(severity `error`), so in [`pipeline.py`](../src/bakasur/pipeline.py#L117) the record:
+(severity `error`), so in [`publishable_rows`](../src/bakasur/pipeline.py#L69) the record:
 
 - stays out of the main sheet,
 - is not expanded into plots (plots come only from records that pass validation), and
@@ -246,6 +247,15 @@ Doubtful data doesn't slip into the main sheet, and records aren't silently drop
 `review_reason` is not one of the sheet columns (`ApplicationRow.to_dict`), so the main sheet
 layout is unchanged.
 
+### Only change-of-zone records are published
+
+Before validation, [`publishable_rows`](../src/bakasur/pipeline.py#L69) drops NDZ records. They
+don't reach the CSV/JSON files in `data/out/`, the sheet, the review queue or the email digest,
+and they aren't marked emitted in the ledger, so publishing them later only needs this filter
+removed. They're still extracted, and remain in the gazette's artifacts and in `extract-39a`.
+The digest's "no rows found" warning still counts NDZ records, so an NDZ-only gazette doesn't
+raise a false alarm.
+
 ## Results on the fixtures
 
 | | Before these rules | Now |
@@ -253,6 +263,9 @@ layout is unchanged.
 | OG21 | 24 records; Navelim missing | 25 records, all to the main sheet |
 | OG19 | 31 records; Rachol and Latambarcem missing, Raia's survey list incomplete | 33 records: 30 to the main sheet, 3 (Raia, Rachol, Latambarcem) to review |
 | `LLM_PROVIDER=ollama` (`qwen2.5:7b`) | Dropped every NDZ table; one shifted map | Same records as the heuristic alone |
+
+These counts are extraction results and include NDZ records. Only the change-of-zone records
+among them are published (see above).
 
 ## Using a local LLM
 

@@ -52,7 +52,12 @@ def is_running_text(text: str, patterns: Sequence[str]) -> bool:
 
 
 def body_text(texts: list[str] | None, running_text_patterns: Sequence[str]) -> list[str]:
-    return [t for t in texts or [] if t.strip() and not is_running_text(t, running_text_patterns)]
+    # Rules like "_____" under a table carry no words, so they aren't body text.
+    return [
+        t
+        for t in texts or []
+        if any(c.isalnum() for c in t) and not is_running_text(t, running_text_patterns)
+    ]
 
 
 def _is_column_number_row(row: list[str]) -> bool:

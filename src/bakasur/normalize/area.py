@@ -6,23 +6,22 @@ import re
 from typing import Any
 
 
-INDIAN_NUM_RE = re.compile(r"[\d,]+")
 PARTLY_RE = re.compile(
     r"Partly\s+([^(\[]+?)\s*\((\d+)m2\)",
     re.I,
 )
+AREA_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")  # Indian digit grouping: 13,80,498
 
 
-def parse_indian_int(text: str | None) -> int | None:
+def parse_area(text: str | None) -> int | float | None:
+    """Area in m2, keeping decimals such as 199.56; whole numbers come back as int."""
     if not text:
         return None
-    m = INDIAN_NUM_RE.search(text.replace(" ", ""))
+    m = AREA_RE.search(text.replace(" ", ""))
     if not m:
         return None
-    digits = m.group(0).replace(",", "")
-    if not digits.isdigit():
-        return None
-    return int(digits)
+    value = float(m.group(0).replace(",", ""))
+    return int(value) if value.is_integer() else value
 
 
 def parse_area_breakdown(text: str | None) -> list[dict[str, Any]]:
@@ -34,10 +33,10 @@ def parse_area_breakdown(text: str | None) -> list[dict[str, Any]]:
     return parts
 
 
-def extract_total_area(text: str | None) -> int | None:
+def extract_total_area(text: str | None) -> int | float | None:
     if not text:
         return None
     m = re.search(r"Total\s+Area\s*\(([^)]+)\)", text, re.I)
     if m:
-        return parse_indian_int(m.group(1))
-    return parse_indian_int(text)
+        return parse_area(m.group(1))
+    return parse_area(text)
