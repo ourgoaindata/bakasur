@@ -10,6 +10,7 @@ from docling_core.types.doc import DoclingDocument
 
 from bakasur.core.config import CoreSettings
 from bakasur.core.convert import Orientation, OrientationDetector, build_converter, convert
+from bakasur.core.export.pagesplit import split_across_pages
 
 # Include text OCR'd inside pictures; scanned pages are one big picture.
 TRAVERSE_PICTURES = True
@@ -37,9 +38,11 @@ def document_to_markdown(
     file, so text quoted from the Markdown can be checked against the original.
     Formats without pages (docx, html, ...) are exported without markers. Pages that were
     turned upright, or whose orientation is uncertain, get a note under their marker.
+    A paragraph that runs across a page break is cut there, so each part sits under its page.
     """
     if not doc.pages:
         return doc.export_to_markdown(traverse_pictures=TRAVERSE_PICTURES)
+    doc = split_across_pages(doc)
     notes = {o.page_no: orientation_note(o) for o in orientations if o.rotation or not o.confident}
     sections = []
     for page_no in sorted(doc.pages):

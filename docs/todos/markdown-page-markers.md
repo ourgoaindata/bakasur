@@ -1,7 +1,13 @@
 # `[Page N]` markers can be early for paragraphs that cross a page break
 
-Found while spot-checking the GCZMA minutes converted with `to-md-batch`. Not fixed yet — this
-is a tracking doc.
+Found while spot-checking the GCZMA minutes converted with `to-md-batch`.
+
+**Fixed (2026-11-26):** `split_across_pages` ([pagesplit.py](../../src/bakasur/core/export/pagesplit.py))
+cuts such items at their page breaks before export. Docling does keep every page's provenance
+and char span on the merged item; it is docling-core's Markdown serializer that files an item
+under `prov[0].page_no` only. Re-converted MoM 001, 002 and 162: no page ends with text from
+the next page any more, the empty pages are filled, and the total text is unchanged. Existing
+outputs need re-converting to pick this up.
 
 ## What happens
 
