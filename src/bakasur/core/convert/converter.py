@@ -29,9 +29,18 @@ from docling.document_converter import DocumentConverter, ImageFormatOption, Pdf
 from docling_core.types.doc import DoclingDocument
 
 from bakasur.core.config import CoreSettings
+from bakasur.core.convert.indic import RENDER_DPI as INDIC_DPI
+from bakasur.core.convert.indic import IndicReader
 from bakasur.core.convert.orientation import Orientation, OrientationDetector
 from bakasur.core.convert.pageinfo import classify_pages, image_pages
 from bakasur.core.convert.preprocess import PreparedPdf, prepare_pdf
+from bakasur.core.convert.script import (
+    PageScript,
+    find_devanagari_pages,
+    judge,
+    pages_with_images,
+    render_page,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +100,8 @@ class Converted:
     scanned: dict[int, bool] = field(default_factory=dict)
     # One entry per image-based page that was checked (PDFs only)
     orientations: list[Orientation] = field(default_factory=list)
+    # One entry per page found to carry Devanagari (PDFs only)
+    scripts: list[PageScript] = field(default_factory=list)
 
     @property
     def uncertain(self) -> list[Orientation]:
@@ -134,6 +145,51 @@ def prepare_input(
     )
 
 
+def build_indic_reader(cfg: CoreSettings) -> IndicReader | None:
+    """The Indic reader the settings ask for; it loads its model on first use."""
+    if not (cfg.detect_scripts and cfg.indic_ocr):
+        return None
+    return IndicReader(cfg.indic_ocr_path, cfg.indic_ocr_device)
+
+
+def read_scripts(
+    path: Path,
+    cfg: CoreSettings,
+    *,
+    page_range: tuple[int, int] | None = None,
+    reader: IndicReader | None = None,
+) -> list[PageScript]:
+    """
+    Find the pages of a PDF that carry Devanagari and read each with ``reader``. Pass the
+    prepared (upright) PDF: the shape check needs the lines horizontal. A page the reader
+    fails on, or every page when there is no reader, is kept as ``not_read`` so it is still
+    flagged; Docling's text stays in place for those.
+    """
+    if not cfg.detect_scripts or path.suffix.lower() != ".pdf":
+        return []
+    try:
+        pages = pages_with_images(path)
+        if page_range:
+            pages = {n for n in pages if page_range[0] <= n <= page_range[1]}
+        found = find_devanagari_pages(path, pages)
+    except Exception:
+        return []  # not a readable PDF; Docling reports the real error
+    scripts = []
+    for page_no, words in found.items():
+        if reader is None:
+            scripts.append(PageScript(page_no, words, "not_read", error="IndicOCR is off"))
+            continue
+        try:
+            markdown = reader.read(render_page(path, page_no, INDIC_DPI))
+        except Exception as exc:
+            logger.warning("%s page %d: IndicOCR failed: %s", path.name, page_no, exc)
+            error = f"{type(exc).__name__}: {exc}"
+            scripts.append(PageScript(page_no, words, "not_read", error=error))
+            continue
+        scripts.append(PageScript(page_no, words, judge(markdown), markdown))
+    return scripts
+
+
 def _scanned_pages(path: Path) -> dict[int, bool]:
     if path.suffix.lower() != ".pdf":
         return {}
@@ -152,10 +208,14 @@ def convert(
     detector: OrientationDetector | None = None,
     force_ocr: bool = False,
     page_images: bool = False,
+    check_scripts: bool = False,
+    indic_reader: IndicReader | None = None,
 ) -> Converted:
     """
     Prepare and convert one file. Pass ``converter`` (and ``detector``) to reuse models
     across files; otherwise a converter is built from ``force_ocr`` and ``page_images``.
+    ``check_scripts`` looks for Devanagari on image pages (``cfg.detect_scripts`` must
+    also be on) and reads those pages with ``indic_reader`` if one is given.
     A whole PDF is converted in one Docling pass: concatenating page-range batches would
     renumber pages from 1, breaking page provenance.
     """
@@ -168,11 +228,19 @@ def convert(
         )
         kwargs: dict[str, Any] = {"page_range": page_range} if page_range else {}
         result = converter.convert(str(prepared.path), **kwargs)
+        scripts = (
+            read_scripts(prepared.path, cfg, page_range=page_range, reader=indic_reader)
+            if check_scripts
+            else []
+        )
     timings = {
         stage: {"count": item.count, "total_s": item.total(), "avg_s": item.avg()}
         for stage, item in (getattr(result, "timings", None) or {}).items()
     }
-    out = Converted(result.document, timings, scanned, prepared.orientations)
+    out = Converted(result.document, timings, scanned, prepared.orientations, scripts)
     for o in out.uncertain:
         logger.warning("%s page %d: %s", path.name, o.page_no, o.describe())
+    for sc in scripts:
+        if sc.status != "indic_ocr":
+            logger.warning("%s page %d: %s", path.name, sc.page_no, sc.describe())
     return out
