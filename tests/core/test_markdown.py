@@ -186,3 +186,48 @@ def test_batch_refuses_to_use_the_input_folder_as_output(batch):
     src, _, _, _ = batch
     result = CliRunner().invoke(app, ["to-md-batch", str(src), "-o", str(src)])
     assert result.exit_code != 0
+
+
+# --- paragraphs that cross a page break --------------------------------------------------
+
+
+def _cross_page_doc(spans):
+    """Page 1 'intro', then one paragraph whose provenance is given as (page, start, end)."""
+    from docling_core.types.doc import (
+        BoundingBox, DocItemLabel, DoclingDocument, ProvenanceItem, Size,
+    )
+
+    doc = DoclingDocument(name="t")
+    for page_no in (1, 2, 3):
+        doc.add_page(page_no=page_no, size=Size(width=100, height=100))
+    box = BoundingBox(l=0, t=0, r=10, b=10)
+    doc.add_text(label=DocItemLabel.TEXT, text="intro", prov=ProvenanceItem(page_no=1, bbox=box, charspan=(0, 5)))
+    text = "end of page one start of page two"
+    para = doc.add_text(
+        label=DocItemLabel.TEXT, text=text, prov=ProvenanceItem(page_no=spans[0][0], bbox=box, charspan=spans[0][1:])
+    )
+    para.prov += [ProvenanceItem(page_no=p, bbox=box, charspan=(s, e)) for p, s, e in spans[1:]]
+    doc.add_text(label=DocItemLabel.TEXT, text="after", prov=ProvenanceItem(page_no=3, bbox=box, charspan=(0, 5)))
+    return doc
+
+
+def test_paragraph_crossing_a_page_break_is_split_under_each_page():
+    doc = _cross_page_doc([(1, 0, 15), (2, 16, 33)])
+    page1, page2, page3 = document_to_markdown(doc).split("\n\n---\n\n")
+    assert page1 == "[Page 1]\n\nintro\n\nend of page one"
+    assert page2 == "[Page 2]\n\nstart of page two"
+    assert page3 == "[Page 3]\n\nafter\n"
+    assert len(doc.texts) == 3  # the caller's document is left untouched
+
+
+def test_several_lines_on_one_page_stay_together():
+    doc = _cross_page_doc([(1, 0, 3), (1, 4, 15), (2, 16, 21), (2, 22, 33)])
+    _, page2, _ = document_to_markdown(doc).split("\n\n---\n\n")
+    assert page2 == "[Page 2]\n\nstart of page two"
+
+
+def test_inconsistent_provenance_is_left_unsplit():
+    doc = _cross_page_doc([(1, 0, 20), (2, 10, 33)])  # overlapping spans
+    page1, page2, _ = document_to_markdown(doc).split("\n\n---\n\n")
+    assert "start of page two" in page1
+    assert page2 == "[Page 2]"

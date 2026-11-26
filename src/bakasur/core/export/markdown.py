@@ -19,6 +19,7 @@ from bakasur.core.convert import (
     build_indic_reader,
     convert,
 )
+from bakasur.core.export.pagesplit import split_across_pages
 
 # Include text OCR'd inside pictures; scanned pages are one big picture.
 TRAVERSE_PICTURES = True
@@ -64,10 +65,12 @@ def document_to_markdown(
     Formats without pages (docx, html, ...) are exported without markers. Pages that were
     turned upright, or whose orientation is uncertain, get a note under their marker, as do
     pages carrying Devanagari. A page IndicOCR read takes its text from that read instead
-    of Docling's, which has the Devanagari blank or as junk letters.
+    of Docling's, which has the Devanagari blank or as junk letters. A paragraph that runs
+    across a page break is cut there, so each part sits under its page.
     """
     if not doc.pages:
         return doc.export_to_markdown(traverse_pictures=TRAVERSE_PICTURES)
+    doc = split_across_pages(doc)
     notes: dict[int, list[str]] = {}
     for o in orientations:
         if o.rotation or not o.confident:
