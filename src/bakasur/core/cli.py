@@ -10,7 +10,7 @@ from rich.console import Console
 from bakasur.core.config import CoreSettings
 from bakasur.core.convert import convert
 from bakasur.core.export.batch import BatchResult, convert_directory
-from bakasur.core.export.markdown import convert_to_markdown_with_orientation
+from bakasur.core.export.markdown import convert_to_markdown_result
 from bakasur.core.rag.chunk import chunk_from_artifact
 
 app = typer.Typer()
@@ -55,8 +55,9 @@ def run_markdown_batch(
             nonlocal seen
             seen += 1
             detail = result.error or f"{result.chars:,} chars"
-            if note := result.orientation_summary():
-                detail += f"  ({note})"
+            for note in (result.orientation_summary(), result.script_summary()):
+                if note:
+                    detail += f"  ({note})"
             line = f"{result.status:<9} {result.seconds:7.1f}s  {result.path.name}  {detail}"
             err_console.print(f"[{seen}/{total}] {line}", markup=False)
             log.write(line + "\n")
@@ -95,13 +96,17 @@ def to_md_cmd(
         raise typer.BadParameter("output would overwrite the input; pass --output", param_hint="--output")
     cfg = CoreSettings()
     with err_console.status(f"Converting {file.name}..."):
-        markdown, orientations = convert_to_markdown_with_orientation(
+        result = convert_to_markdown_result(
             file, cfg, force_ocr=force_ocr, page_range=parse_page_range(page_range)
         )
-    for o in orientations:
+    markdown = result.markdown
+    for o in result.orientations:
         if o.rotation or not o.confident:
             colour = "yellow" if not o.confident else "cyan"
             err_console.print(f"[{colour}]Page {o.page_no}: {o.describe()}[/{colour}]")
+    for s in result.scripts:
+        colour = "cyan" if s.status == "indic_ocr" else "yellow"
+        err_console.print(f"[{colour}]Page {s.page_no}: {s.describe()}[/{colour}]")
     if str(out) == "-":
         typer.echo(markdown)
         return

@@ -33,6 +33,14 @@ class CoreSettings(BaseSettings):
     # Detect sideways / upside-down scanned pages and turn them upright before OCR. A table
     # printed sideways on a portrait page (MoM 274, p. 38) otherwise comes out as gibberish.
     fix_orientation: bool = Field(default=True)
+    # Look for Devanagari (Marathi/Konkani) on image pages. RapidOCR cannot read it: in the
+    # GCZMA minutes, occupant names (MoM 518, p. 70) came out blank or as junk letters.
+    detect_scripts: bool = Field(default=True)
+    # Read pages found to carry Devanagari with IndicOCR (bodhan-ai/indic-ocr, gated on
+    # Hugging Face; ~40 s a page on Apple Silicon). Off: such pages are only flagged.
+    indic_ocr: bool = Field(default=True)
+    indic_ocr_path: Path | None = Field(default=None)  # a local snapshot; default: HF cache
+    indic_ocr_device: str = Field(default="auto")  # auto | cuda | mps | cpu
     profile_timings: bool = Field(default=False)
 
     # LLM

@@ -84,6 +84,23 @@ the candidate angles picks the direction. Turned pages get an HTML comment under
 artifact `meta.json` (`page_orientation`), for a check by hand. Set `FIX_ORIENTATION=false` to
 turn the check off. See [orientation.py](src/bakasur/core/convert/orientation.py) for the thresholds.
 
+`to-md` and `to-md-batch` also look for Devanagari (Marathi/Konkani) on image pages, which
+RapidOCR cannot read: in the GCZMA minutes, occupant names from Form I & XIV come out blank or as
+junk letters. The check is by shape, without OCR (Devanagari words hang from a flat headline), and
+a flagged page is read with [IndicOCR](https://huggingface.co/bodhan-ai/indic-ocr), whose text
+replaces Docling's for that page. Each flagged page gets a note under its `[Page N]` marker, a line
+in `_batch.log`, and an entry in `<name>.meta.json` next to the Markdown:
+
+- read with IndicOCR: an HTML comment;
+- `> **Garbled Devanagari:**`: the PDF itself holds English typed in a Devanagari font;
+- `> **Unrecognised script:**`: IndicOCR returned no Devanagari, so it is some other script;
+- `> **Devanagari not read:**`: IndicOCR is off or failed to load; Docling's text is kept.
+
+IndicOCR is gated: accept its licence on Hugging Face and run `hf auth login` (the first flagged
+page downloads 1.9 GB), or set `INDIC_OCR_PATH` to a downloaded snapshot. It takes about 40 s a
+page on Apple Silicon. `INDIC_OCR=false` only flags the pages; `DETECT_SCRIPTS=false` skips the
+check. See [script.py](src/bakasur/core/convert/script.py).
+
 Each run also writes `data/out/run_*.master.csv`: the run's change-of-zone rows in the column
 layout of the "Substantive Objections" tab of the 39A master sheet. `export-master` writes the
 same file for a gazette already in the artifact store, even if the ledger has it as processed.

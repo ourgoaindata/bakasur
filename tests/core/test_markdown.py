@@ -1,5 +1,6 @@
 """Any-file to Markdown conversion keeps source page numbers."""
 
+import json
 import os
 import signal
 from pathlib import Path
@@ -137,6 +138,8 @@ def test_batch_gives_each_file_a_folder_with_a_copy_and_its_markdown(batch):
     for stem in ("MoM 001 (1999)", "MoM 002 (2000)"):
         assert (out / stem / f"{stem}.pdf").read_text() == f"{stem}.pdf"
         assert f"[Page 1]\n\n{stem}" in (out / stem / f"{stem}.md").read_text()
+        meta = json.loads((out / stem / f"{stem}.meta.json").read_text())
+        assert meta == {"orientations": [], "scripts": []}
     assert not (out / "notes").exists()
     assert (src / "MoM 001 (1999).pdf").exists()
     assert len((out / "_batch.log").read_text().splitlines()) == 2
