@@ -5,7 +5,7 @@ is a tracking doc.
 
 ## What happens
 
-`document_to_markdown` ([markdown.py](../../src/bakasur/parse/markdown.py)) exports each page
+`document_to_markdown` ([markdown.py](../../src/bakasur/core/export/markdown.py)) exports each page
 with `doc.export_to_markdown(page_no=N)` and puts a `[Page N]` marker before it. When a
 paragraph runs across a page break, Docling merges it into one text item, and the whole item
 is exported under the page where it **starts**. The pages it continues onto come out empty or

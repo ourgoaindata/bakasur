@@ -6,7 +6,15 @@
 </p>
 
 
-Watch an inbox folder for Goa Official Gazette PDFs, parse each once with Docling, extract Section 39A change-of-zone tables, append rows to Google Sheets, and email a digest.
+Parse Goa government documents with Docling. A shared core converts PDFs, scans and office
+files (OCR, sideways-page correction, Markdown with page markers, artifact folders); each
+document type is a use case built on it:
+
+- **39A land conversions** (`bakasur 39a ...`): watch an inbox folder for Official Gazette PDFs,
+  parse each once, extract Section 39A change-of-zone tables, append rows to Google Sheets, and
+  email a digest.
+- **GCZMA minutes** (`bakasur mom ...`): convert the Coastal Zone Management Authority's Minutes
+  of Meetings to Markdown.
 
 ## Setup
 
@@ -26,24 +34,40 @@ EMAIL_ENABLED=false
 
 ## Usage
 
-Drop a PDF into `data/inbox/`, then:
+Any document:
 
 ```bash
-uv run bakasur run --once
-uv run bakasur watch          # continuous polling
-uv run bakasur status
-uv run bakasur parse fixtures/your.pdf
-uv run bakasur spike-parse fixtures/your.pdf --page-range 1-5
-uv run bakasur extract-39a <gazette_id>
-uv run bakasur export-master <gazette_id>   # data/out/<gazette_id>.master.csv
-uv run bakasur chunk-rag <gazette_id>
 uv run bakasur to-md any/file.pdf            # writes any/file.md; -o - for stdout
 uv run bakasur to-md-batch in_dir -o out_dir # out_dir/<name>/<name>.pdf + <name>.md for each *.pdf
+uv run bakasur chunk-rag data/gazettes/<id>  # an artifact folder or its docling.json
+uv run bakasur spike-parse fixtures/your.pdf --page-range 1-5
+```
+
+39A land conversions. Drop a PDF into `data/inbox/`, then:
+
+```bash
+uv run bakasur 39a run --once
+uv run bakasur 39a watch          # continuous polling
+uv run bakasur 39a status
+uv run bakasur 39a parse fixtures/your.pdf
+uv run bakasur 39a extract <gazette_id>
+uv run bakasur 39a export-master <gazette_id>   # data/out/<gazette_id>.master.csv
+uv run bakasur 39a sync-sheets
+```
+
+The pre-reorganisation names (`bakasur run`, `status`, `parse`, `extract-39a`, `export-master`,
+`sync-sheets`, `watch`) still work but are hidden from `--help`.
+
+GCZMA minutes:
+
+```bash
+uv run bakasur mom convert mom_pdfs/ -o mom_md/   # every MoM*.pdf, like to-md-batch
 ```
 
 `to-md` converts any file Docling reads (PDF, images, docx, pptx, xlsx, html, ...) to Markdown,
-OCRing scans with RapidOCR. Paginated inputs get a `[Page N]` marker before each page's content,
-numbered as in the source file, so quotes can be checked against the original.
+OCRing scans (RapidOCR by default; `OCR_ENGINE=ocrmac` for Apple Vision). Paginated inputs get
+a `[Page N]` marker before each page's content, numbered as in the source file, so quotes can be
+checked against the original.
 
 `to-md-batch` does the same for every file matching `--glob` (default `*.pdf`) in a folder,
 loading the models once. Each file gets its own `<out_dir>/<name>/` folder holding a copy of the
@@ -58,12 +82,34 @@ the candidate angles picks the direction. Turned pages get an HTML comment under
 `[Page N]` marker. Pages the check is unsure about get a visible
 `> **Orientation uncertain:**` line and are listed on stderr, in `_batch.log`, and in the
 artifact `meta.json` (`page_orientation`), for a check by hand. Set `FIX_ORIENTATION=false` to
-turn the check off. See [orientation.py](src/bakasur/parse/orientation.py) for the thresholds.
+turn the check off. See [orientation.py](src/bakasur/core/convert/orientation.py) for the thresholds.
 
 Each run also writes `data/out/run_*.master.csv`: the run's change-of-zone rows in the column
 layout of the "Substantive Objections" tab of the 39A master sheet. `export-master` writes the
 same file for a gazette already in the artifact store, even if the ledger has it as processed.
 See [docs/master-csv.md](docs/master-csv.md) for where each column comes from.
+
+## Project layout
+
+```
+src/bakasur/
+  cli.py                 # root CLI: core commands + one sub-app per use case
+  core/                  # never imports from usecases/ (tests/test_boundaries.py checks)
+    convert/             # the one Docling converter; orientation, scan prep, page info
+    export/              # Markdown with page markers; folder batches in a worker process
+    store/               # artifact folders: docling.json, pages, tables, meta.json
+    rag/  llm/  notify/  sinks/   # chunking, LLM JSON calls, SMTP, Google Sheets
+    config.py            # CoreSettings: OCR, LLM endpoint, Google credentials, SMTP
+    cli.py               # to-md, to-md-batch, chunk-rag, spike-parse
+  usecases/
+    land_conversion_39a/ # 39A: anchors, tables, column mapping, normalisation, ledger, pipeline
+    gczma_mom/           # GCZMA minutes
+```
+
+To add a document type, create `usecases/<name>/` with a `cli.py` exposing a `typer.Typer` app,
+subclass `CoreSettings` in its own `config.py` if it needs settings, and add the app to
+`USE_CASES` in [`cli.py`](src/bakasur/cli.py). Use cases import only from `bakasur.core` and
+themselves.
 
 ## How extraction works
 

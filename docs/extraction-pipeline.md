@@ -23,7 +23,7 @@ PDF ─► 1. parse ─► 2. find 39A sections ─► 3. stitch tables ─► 4
 
 1. **Parse.** Docling turns each page into text and tables (`data/gazettes/{id}/tables/*.json`).
 2. **Find 39A sections.** Phrases like "Section 39A" and "No Development Zone" mark where each
-   notification starts and ends ([`gazette/anchors.py`](../src/bakasur/gazette/anchors.py)).
+   notification starts and ends ([`gazette/anchors.py`](../src/bakasur/usecases/land_conversion_39a/gazette/anchors.py)).
 3. **Stitch tables.** A table that runs over several pages is joined back into one.
 4. **Map columns.** Work out which column is the Sr. No., the survey numbers, the village, etc.
 5. **Merge continuation rows.** Text that spilled onto the next page is joined back onto its record.
@@ -32,11 +32,11 @@ PDF ─► 1. parse ─► 2. find 39A sections ─► 3. stitch tables ─► 4
    extracted but never written to the CSV or the sheet.
 
 Steps 3–6 are covered below. The orchestration lives in
-[`extract.py`](../src/bakasur/extract.py).
+[`extract.py`](../src/bakasur/usecases/land_conversion_39a/extract.py).
 
 ## Step 3: Stitching tables across pages
 
-Code: [`chain_tables` / `stitch_tables`](../src/bakasur/gazette/tables.py#L207)
+Code: [`chain_tables` / `stitch_tables`](../src/bakasur/usecases/land_conversion_39a/gazette/tables.py#L212)
 
 Two tables on consecutive pages are joined when they look like one table:
 
@@ -52,9 +52,9 @@ headerless table that no mapper accepts, and they'd be lost without warning.
 
 **How it's spotted:** gazette tables have a row of column numbers under the header. Normally
 it reads `1 | 2 | 3 | …`. On a squashed page it reads `1 2 | 3 | 4 …` or `2 | 3 | 4 …`.
-That row tells us column 1 was swallowed ([`_folds_first_column`](../src/bakasur/gazette/tables.py#L133)).
+That row tells us column 1 was swallowed ([`_folds_first_column`](../src/bakasur/usecases/land_conversion_39a/gazette/tables.py#L138)).
 
-**How it's repaired:** [`_unmerge_first_column`](../src/bakasur/gazette/tables.py#L141) splits
+**How it's repaired:** [`_unmerge_first_column`](../src/bakasur/usecases/land_conversion_39a/gazette/tables.py#L146) splits
 the Sr. No. back out of the survey cell and restores the column count, so the page joins
 the table. There are two cases.
 
@@ -105,7 +105,7 @@ Suspect Sr. Nos. are carried on `StitchedTable.suspect_sr` and become a review r
 
 ## Step 4: Mapping columns
 
-Code: [`llm/schema_mapper.py`](../src/bakasur/llm/schema_mapper.py)
+Code: [`llm/schema_mapper.py`](../src/bakasur/usecases/land_conversion_39a/llm/schema_mapper.py)
 
 Mapping means deciding which column holds which field, for example:
 
@@ -114,9 +114,9 @@ sr_no=0, survey=1, village_taluka=2, existing_use=3, proposed_use=4, area_propos
 ```
 
 There are two mappers, which share the `ColumnMapper` interface in
-[`llm/base.py`](../src/bakasur/llm/base.py):
+[`llm/base.py`](../src/bakasur/usecases/land_conversion_39a/llm/base.py):
 
-- **Heuristic** ([`heuristic_map_columns`](../src/bakasur/llm/schema_mapper.py#L71)): matches header
+- **Heuristic** ([`heuristic_map_columns`](../src/bakasur/usecases/land_conversion_39a/llm/schema_mapper.py#L70)): matches header
   words against `HEADER_ALIASES` ("Sy. No." means survey, "Decision" means decision). If the
   headers are blank but the table has the standard 7 (NDZ) or 8 (change-of-zone) columns, it
   assumes the standard order.
@@ -125,7 +125,7 @@ There are two mappers, which share the `ColumnMapper` interface in
 ### The heuristic goes first
 
 With `LLM_PROVIDER=ollama` or `openai_compat`, `get_mapper` returns a
-[`HeuristicFirstMapper`](../src/bakasur/llm/schema_mapper.py#L285). It uses the heuristic's
+[`HeuristicFirstMapper`](../src/bakasur/usecases/land_conversion_39a/llm/schema_mapper.py#L254). It uses the heuristic's
 answer whenever the heuristic finds a map, and only asks the LLM about tables the heuristic
 can't map. The LLM can therefore add tables, but never override a table the heuristic handles.
 
@@ -155,7 +155,7 @@ Every field after the missing one is shifted one column left, so area values wou
 
 ### Sanity checks on the LLM's answer
 
-[`_check_sample_content`](../src/bakasur/llm/schema_mapper.py#L232) rejects a map whose columns
+[`_check_sample_content`](../src/bakasur/usecases/land_conversion_39a/llm/schema_mapper.py#L201) rejects a map whose columns
 hold the wrong kind of value:
 
 - **Decision:** if a sample row contains "Recommend…", it must be in the column the map calls
@@ -170,7 +170,7 @@ heuristic and logs `… column mapping failed, using heuristic`.
 
 ## Step 5: Merging continuation rows
 
-Code: [`merge_continuation_rows`](../src/bakasur/gazette/tables.py#L296)
+Code: [`merge_continuation_rows`](../src/bakasur/usecases/land_conversion_39a/gazette/tables.py#L301)
 
 A row with a blank Sr. No. is one of two things:
 
@@ -179,11 +179,11 @@ A row with a blank Sr. No. is one of two things:
 
 Two rules decide which.
 
-**Rule 1, content** ([`_is_continuation_row`](../src/bakasur/gazette/tables.py#L265)): if the
+**Rule 1, content** ([`_is_continuation_row`](../src/bakasur/usecases/land_conversion_39a/gazette/tables.py#L270)): if the
 blank row has its own survey numbers *and* its own village, it's a new record. Otherwise it's
 overflow.
 
-**Rule 2, the Sr. No. sequence** ([`_sequence_verdicts`](../src/bakasur/gazette/tables.py#L276)):
+**Rule 2, the Sr. No. sequence** ([`_sequence_verdicts`](../src/bakasur/usecases/land_conversion_39a/gazette/tables.py#L281)):
 look at the numbered rows above and below.
 
 ```
@@ -227,7 +227,7 @@ flagged records.
 
 ## Step 6: Validation and the review queue
 
-Code: [`extract.py`](../src/bakasur/extract.py#L22), [`validate.py`](../src/bakasur/validate.py#L37)
+Code: [`extract.py`](../src/bakasur/usecases/land_conversion_39a/extract.py#L22), [`validate.py`](../src/bakasur/usecases/land_conversion_39a/validate.py#L37)
 
 Each record (`ApplicationRow`) has a `review_reason`. Extraction sets it when:
 
@@ -237,7 +237,7 @@ Each record (`ApplicationRow`) has a `review_reason`. Extraction sets it when:
 | `DISPUTED_SPLIT_REASON` | The two merge rules disagreed about this record (step 5) |
 
 A record can carry both. Validation turns `review_reason` into a blocking issue
-(severity `error`), so in [`publishable_rows`](../src/bakasur/pipeline.py#L69) the record:
+(severity `error`), so in [`publishable_rows`](../src/bakasur/usecases/land_conversion_39a/pipeline.py#L70) the record:
 
 - stays out of the main sheet,
 - is not expanded into plots (plots come only from records that pass validation), and
@@ -249,7 +249,7 @@ layout is unchanged.
 
 ### Only change-of-zone records are published
 
-Before validation, [`publishable_rows`](../src/bakasur/pipeline.py#L69) drops NDZ records. They
+Before validation, [`publishable_rows`](../src/bakasur/usecases/land_conversion_39a/pipeline.py#L70) drops NDZ records. They
 don't reach the CSV/JSON files in `data/out/`, the sheet, the review queue or the email digest,
 and they aren't marked emitted in the ledger, so publishing them later only needs this filter
 removed. They're still extracted, and remain in the gazette's artifacts and in `extract-39a`.

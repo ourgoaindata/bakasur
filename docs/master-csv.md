@@ -2,7 +2,7 @@
 
 `run_*.master.csv` (and `bakasur export-master`) lays out each change-of-zone record the way the
 "Substantive Objections" tab of the 39A master sheet does, so the rows can be pasted under its
-header. Code: [`sinks/master.py`](../src/bakasur/sinks/master.py).
+header. Code: [`sinks/master.py`](../src/bakasur/usecases/land_conversion_39a/sinks/master.py).
 
 - NDZ records are left out, as in the other outputs.
 - Records held for review are left out too; they're in `run_*.review.json`.
@@ -47,7 +47,7 @@ Changes from the sheet:
   for example Panelim (Panaji).
 
 Gazette spellings that differ from the list (Boma for Bhoma, Arvalem for Arvelem) are in
-`VILLAGE_ALIASES` in [`normalize/villages.py`](../src/bakasur/normalize/villages.py).
+`VILLAGE_ALIASES` in [`normalize/villages.py`](../src/bakasur/usecases/land_conversion_39a/normalize/villages.py).
 
 When the list has no VP1/VP2 status for a village (municipal and ODP areas), New Zone says
 `Settlement`. When the village isn't in the list, VP and AC are blank.
