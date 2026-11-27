@@ -67,7 +67,8 @@ uv run bakasur mom convert mom_pdfs/ -o mom_md/   # every MoM*.pdf, like to-md-b
 `to-md` converts any file Docling reads (PDF, images, docx, pptx, xlsx, html, ...) to Markdown,
 OCRing scans (RapidOCR by default; `OCR_ENGINE=ocrmac` for Apple Vision). Paginated inputs get
 a `[Page N]` marker before each page's content, numbered as in the source file, so quotes can be
-checked against the original.
+checked against the original. A paragraph that runs over a page break is split at the break, so its
+continuation sits under the next page's marker rather than the page it started on.
 
 `to-md-batch` does the same for every file matching `--glob` (default `*.pdf`) in a folder,
 loading the models once. Each file gets its own `<out_dir>/<name>/` folder holding a copy of the
@@ -98,7 +99,8 @@ in `_batch.log`, and an entry in `<name>.meta.json` next to the Markdown:
 
 IndicOCR is gated: accept its licence on Hugging Face and run `hf auth login` (the first flagged
 page downloads 1.9 GB), or set `INDIC_OCR_PATH` to a downloaded snapshot. It takes about 40 s a
-page on Apple Silicon. `INDIC_OCR=false` only flags the pages; `DETECT_SCRIPTS=false` skips the
+page on Apple Silicon. `INDIC_OCR_DEVICE` picks where it runs (`auto`, the default, or `cuda`,
+`mps`, `cpu`). `INDIC_OCR=false` only flags the pages; `DETECT_SCRIPTS=false` skips the
 check. See [script.py](src/bakasur/core/convert/script.py).
 
 Each run also writes `data/out/run_*.master.csv`: the run's change-of-zone rows in the column
